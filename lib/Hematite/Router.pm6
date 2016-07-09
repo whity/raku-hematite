@@ -1,0 +1,138 @@
+use Hematite::Route;
+use Hematite::Context;
+use Hematite::Exceptions;
+
+unit class Hematite::Router;
+
+has Callable @!middlewares    = ();
+has Hematite::Router %!groups = ();
+has Hematite::Route @!routes  = ();
+
+method new() {
+    return self.bless({});
+}
+
+# fallback for the http method
+method FALLBACK($name where /^<[A .. Z]>+$/, |args) {
+    return self.METHOD($name, |@(args));
+}
+
+method middlewares() {
+    my @copy = @!middlewares;
+    return @copy;
+}
+
+method routes() {
+    return @!routes.clone;
+}
+
+method groups() {
+    return %!groups.clone;
+}
+
+method use(Callable $middleware) {
+    @!middlewares.push($middleware);
+    return self;
+}
+
+method group(Str $pattern is copy) {
+    if ($pattern.substr(0, 1) ne "/") {
+        $pattern = "/" ~ $pattern;
+    }
+    $pattern ~~ s/\/$//; # remove ending slash
+
+    my $group = %!groups{$pattern};
+    if (!$group) {
+        $group = %!groups{$pattern} = Hematite::Router.new;
+    }
+
+    return $group;
+}
+
+multi method METHOD(Str $method, Str $pattern, Callable $fn) {
+    return self!create-route($method, $pattern, self!middleware-runner($fn));
+}
+
+multi method METHOD(Str $method, Str $pattern, @middlewares is copy, Callable $fn) {
+    # prepare middleware
+    my Callable $stack = self._prepare-middleware(@middlewares, $fn);
+
+    # create route
+    return self!create-route($method, $pattern, $stack);
+}
+
+method !create-route(Str $method, Str $pattern is copy, Callable $fn) {
+    # add initial slash to pattern
+    if ($pattern.substr(0, 1) ne "/") {
+        $pattern = "/" ~ $pattern;
+    }
+
+    my $route = Hematite::Route.new($method.uc, $pattern, $fn);
+    @!routes.push($route);
+
+    return $route;
+}
+
+method _prepare-routes(Str $parent_pattern, @middlewares is copy) {
+    my @routes = [];
+
+    @middlewares.append(@!middlewares);
+
+    # create routes with the router middleware
+    for @!routes -> $route {
+        my $stack = self._prepare-middleware(@middlewares, $route.stack);
+        @routes.push(
+            Hematite::Route.new(
+                $route.method,
+                $parent_pattern ~ $route.pattern,
+                $stack
+            )
+        );
+    }
+
+    # sub-routers
+    for %!groups.kv -> $pattern, $router {
+        $pattern = $parent_pattern ~ $pattern;
+        my @group_routes = $router._prepare_routes($pattern, @middlewares);
+        @routes.append(@group_routes);
+    }
+
+    return @routes;
+}
+
+method _prepare-middleware(@middlewares, Callable $app?) {
+    my $stack = $app;
+    for @middlewares.reverse -> $mdw {
+        $stack = self!middleware-runner($mdw, $stack);
+    }
+
+    return $stack;
+}
+
+method !middleware-runner(Callable $mdw, Callable $next?) {
+    my $tmp_next = $next || sub {};
+
+    return sub (Hematite::Context $ctx) {
+        try {
+            my $arity = $mdw.arity;
+            if ($arity == 2) {
+                $mdw($ctx, $tmp_next);
+            }
+            elsif ($arity == 1) {
+                $mdw($ctx);
+            }
+            else {
+                $mdw();
+            }
+
+            # catch http exceptions and detach
+            CATCH {
+                my $ex = $_;
+
+                when X::Hematite::DetachException {
+                    # don't do nothing, stop current middleware process
+                }
+            }
+        }
+    };
+}
