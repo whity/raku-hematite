@@ -242,8 +242,17 @@ multi method url-for-route(Str $name, *%query) {
 #       - as_string => by default False, otherwise just return the string doesn't set the response
 
 method render-to-string($data, *%options) {
-    my $type   = lc(%options{'type'} // 'template');
-    my $format = lc(%options{'format'} // 'html');
+    return self!render-to-string($data, %options);
+}
+
+method !render-to-string($data, Hash $options) {
+    my $type = $options{'type'};
+    if (!$type) {
+        # if is a Str, by default is a template otherwise is json
+        $type = $data.isa(Str) ?? 'template' !! 'json';
+    }
+
+    $options{'type'} = $type = lc($type);
 
     if ($type ne 'json') {
         die('render not implemented yet');
@@ -253,9 +262,9 @@ method render-to-string($data, *%options) {
 }
 
 method render($data, *%options) {
-    my $result = self.render-to-string($data, |%options);
+    my $result = self!render-to-string($data, %options);
 
-    my $type   = lc(%options{'type'} // 'template');
+    my $type   = %options{'type'};
     my $format = lc(%options{'format'} // 'html');
     my $content_type = $type eq 'template' ?? $format !! $type;
     $content_type = $MimeTypes.type($content_type);

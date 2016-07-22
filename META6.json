@@ -1,5 +1,6 @@
 {
     "depends" : [
-          "Crust"
+          "Crust",
+          "MIME::Types"
        ]
 }
