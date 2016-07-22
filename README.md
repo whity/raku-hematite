@@ -1,15 +1,5 @@
 # Hematite
 
-## Installation
-
-Add this to your application's `shard.yml`:
-
-```yaml
-dependencies:
-  i18n:
-    github: whity/crystal-i18n
-```
-
 ## Usage
 
 ```perl6
