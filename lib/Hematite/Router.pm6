@@ -9,7 +9,7 @@ has Hematite::Router %!groups = ();
 has Hematite::Route @!routes  = ();
 
 method new() {
-    return self.bless({});
+    return self.bless();
 }
 
 # fallback for the http method

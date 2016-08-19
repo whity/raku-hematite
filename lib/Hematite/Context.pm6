@@ -32,7 +32,7 @@ method new($app, Hash $env) {
 submethod BUILD(*%args) {
     $!app      = %args{'app'};
     $!request  = Hematite::Request.new(%args{'env'});
-    $!response = Hematite::Response.new(200, Content-Type => 'text/html');
+    $!response = Hematite::Response.new(200, Content-Type => 'text/html, charset=utf8');
 
     # search for the mime.types file
     if (!$MimeTypes) {
