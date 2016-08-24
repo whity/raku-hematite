@@ -141,10 +141,10 @@ method handler() returns Callable {
         my $body    = $ctx.response.content;
 
         # set content-type charset if not present
-        my $content_type = $headers{'Content-Type'}[0];
-        if (!($content_type ~~ m/\s*charset\=/ )) {
-            $headers{'Content-Type'} ~= '; charset=utf-8';
-        }
+        my $charset = $ctx.response.charset || 'utf8';
+        my $content_type = $ctx.response.content-type || 'text/html';
+        $content_type = "{ $content_type }, charset={ $charset }";
+        $headers{'Content-Type'} = $content_type;
 
         if (!$body.isa(Channel) && !$body.isa(IO::Handle)) {
             if (!$body.isa(Array)) {
