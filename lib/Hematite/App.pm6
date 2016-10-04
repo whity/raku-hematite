@@ -1,4 +1,5 @@
 use HTTP::Status;
+use Log;
 use Hematite::Context;
 use Hematite::Router;
 use Hematite::Response;
@@ -9,8 +10,18 @@ unit class Hematite::App is Hematite::Router;
 has Callable %!error_handlers = ();
 has Hematite::Route %!routes_by_name = ();
 has Callable %!helpers = ();
+has %.config = ();
+has Log $.log;
 
-submethod BUILD() {
+method new(*%args) {
+    return self.bless(|%args);
+}
+
+submethod BUILD(*%args) {
+    %!config = %args;
+
+    $!log = Log.new(level => %!config{'log_level'} || Log::INFO);
+
     # default handler
     self.error-handler('unexpected', sub ($ctx, *%args) {
         my $ex = %args{'exception'};
@@ -21,7 +32,8 @@ submethod BUILD() {
         $ctx.response.content =
             sprintf("%s\n%s", get_http_status_msg($status), $ex.gist);
 
-        # TODO: log it
+        # log exception
+        $ctx.log.error($ex.gist);
 
         return;
     });
@@ -57,7 +69,11 @@ multi method helper(Str $name) {
 }
 
 multi method helper(Str $name, Callable $fn) returns Hematite::App {
-    # TODO: give error if already exists
+    # give error if already exists
+    if (%!helpers{$name}:exists) {
+        self.log.warn("helper $( $name ) already registered replacing it");
+    }
+
     %!helpers{$name} = $fn;
     return self;
 }
@@ -99,6 +115,7 @@ method handler() returns Callable {
     my $app = self;
 
     # prepare routes
+    self.log.debug('preparing routes...');
     my @routes = self._prepare-routes;
     for @routes -> $route {
         if ($route.name) {
@@ -107,6 +124,7 @@ method handler() returns Callable {
     }
 
     # prepare main middleware
+    self.log.debug('preparing middleware...');
     self.use(sub ($ctx) {
         for @routes -> $route {
             if ($route.match($ctx)) {

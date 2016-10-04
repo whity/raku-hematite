@@ -5,6 +5,7 @@ use Hematite::Response;
 use Hematite::Exceptions;
 use JSON::Fast;
 use MIME::Types;
+use Log;
 
 unit class Hematite::Context;
 
@@ -20,6 +21,7 @@ has %!captures = (
     'named' => Nil
 );
 has %.stash = ();
+has Log $.log;
 
 # methods
 method new($app, Hash $env) {
@@ -32,7 +34,15 @@ method new($app, Hash $env) {
 submethod BUILD(*%args) {
     $!app      = %args{'app'};
     $!request  = Hematite::Request.new(%args{'env'});
-    $!response = Hematite::Response.new(200, Content-Type => 'text/html, charset=utf8');
+    $!response = Hematite::Response.new(200, Content-Type => 'text/html, charset=utf-8');
+    $!log      = Log.new(
+        pattern => '[%d][%X{request_id}][%c] %m%n',
+        level   => $!app.log.level,
+        output  => $!app.log.output,
+    );
+
+    self.log.mdc.put('request_id',
+        sprintf('%s-%s', $*PID, $*THREAD.id));
 
     # search for the mime.types file
     if (!$MimeTypes) {
@@ -46,7 +56,7 @@ submethod BUILD(*%args) {
         }
     }
 
-    say $!request.uri;
+    self.log.debug('processing request: ' ~ $!request.uri);
 
     return self;
 }
@@ -62,17 +72,17 @@ method !get-captures(Str $type) {
 
 method !set-captures(Str $type, $values) {
     if (%!captures{$type}.defined) {
-        # TODO: throw error
-        return;
+        self.log.debug('captures already setted, skipping it.');
+        return self;
     }
 
     my $copy = EVAL($values.perl);
     %!captures{$type} = $copy;
-    return;
+    return self;
 }
 
 # route captures
-multi method params() returns Array {
+multi method captures() returns Array {
     return self!get-captures('list');
 }
 
@@ -310,6 +320,48 @@ multi method handle-error(Str $type, *%args) {
 
     return;
 }
+
+method stream(Callable $fn) returns Hematite::Context {
+    my $channel = Channel.new;
+    start {
+        my $orig_request_id = self.log.mdc.get('request_id');
+        self.log.mdc.put('request_id',
+            sprintf('%s-%s', $orig_request_id, $*THREAD.id));
+
+        self.try-catch(
+            try     => sub { $fn(sub ($value) { $channel.send($value); }); },
+            catch   => sub ($ex) {
+                # log the error
+                self.log.error($ex.gist);
+            },
+            finally => sub {
+                $channel.close;
+                self.log.debug('stream closed');
+            }
+        );
+
+        self.log.mdc.put('request_id', $orig_request_id);
+    };
+
+    self.response.content = $channel;
+
+    return self;
+}
+
+method serve-file(Str $filepath) {
+    # get file extension
+    my $ext = IO::Path.new($filepath).extension;
+
+    # guess content type
+    my $content_type = $MimeTypes.type($ext);
+    self.response.content-type($content_type);
+
+    # serve file
+    self.response.content = $filepath.IO.open;
+
+    return self;
+}
+
 
 #multi method handle-error(Exception $ex) {
 #    my $handler_name = $ex.WHAT.gist;
