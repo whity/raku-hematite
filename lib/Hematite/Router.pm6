@@ -30,7 +30,7 @@ method groups() {
     return %!groups.clone;
 }
 
-method use(Callable $middleware) {
+multi method use(Callable $middleware) {
     @!middlewares.push($middleware);
     return self;
 }
@@ -114,15 +114,19 @@ method !middleware-runner(Callable $mdw, Callable $next?) {
 
     return sub (Hematite::Context $ctx) {
         try {
-            my $arity = $mdw.arity;
-            if ($arity == 2) {
-                $mdw($ctx, $tmp_next);
-            }
-            elsif ($arity == 1) {
-                $mdw($ctx);
+            my Int $arity = Nil;
+            if ($mdw.isa(Code)) {
+                $arity = $mdw.arity;
             }
             else {
-                $mdw();
+                my ($method) = $mdw.can('CALL-ME');
+                $arity = $method.arity - 1;
+            }
+
+            given $arity {
+                when 2 { $mdw($ctx, $tmp_next); }
+                when 1 { $mdw($ctx); }
+                default { $mdw(); }
             }
 
             # catch http exceptions and detach
