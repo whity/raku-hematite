@@ -3,6 +3,7 @@ use Log;
 use Hematite::Context;
 use Hematite::Router;
 use Hematite::Response;
+use Hematite::Plugin;
 use Hematite::Exceptions;
 
 unit class Hematite::App is Hematite::Router;
@@ -59,7 +60,7 @@ submethod BUILD(*%args) {
     return self;
 }
 
-method plugin(Any:U $plugin, *%config) returns Hematite::App {
+multi method use(Hematite::Plugin:U $plugin, *%config) returns Hematite::App {
     $plugin.register(self, |%config);
     return self;
 }
