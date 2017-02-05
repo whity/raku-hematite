@@ -230,6 +230,7 @@ multi method url-for-route(Str $name, $captures, *%query) {
     my $route = self.app.get-route($name);
     if ( !$route ) {
         # TODO: log warn
+        self.log.warn('');
         return;
     }
 
@@ -255,14 +256,14 @@ method render-to-string($data, *%options) {
     return self!render-to-string($data, %options);
 }
 
-method !render-to-string($data, Hash $options) {
-    my $type = $options{'type'};
+method !render-to-string($data, %options) {
+    my $type = %options{'type'};
     if (!$type) {
         # if is a Str, by default is a template otherwise is json
         $type = $data.isa(Str) ?? 'template' !! 'json';
     }
 
-    $options{'type'} = $type = lc($type);
+    %options{'type'} = $type = lc($type);
 
     if ($type ne 'json') {
         die('render not implemented yet');
