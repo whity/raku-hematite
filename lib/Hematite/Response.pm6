@@ -2,6 +2,8 @@ use HTTP::Response;
 
 unit class Hematite::Response is HTTP::Response;
 
+has %.cookies = ();
+
 multi method charset() returns Str {
     my $content_type = self.header.hash{'Content-Type'}[0];
     my $charset = ($content_type ~~ /\s*charset\=(<[\w-]>*)/);
