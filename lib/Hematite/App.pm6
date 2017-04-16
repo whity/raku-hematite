@@ -4,14 +4,12 @@ use Log;
 use Hematite::Context;
 use Hematite::Router;
 use Hematite::Response;
-use Hematite::Plugin;
 use Hematite::Exceptions;
 
 unit class Hematite::App is Hematite::Router;
 
 has Callable %!error_handlers = ();
 has Hematite::Route %!routes_by_name = ();
-has Callable %!helpers = ();
 has %.config = ();
 has Log $.log;
 
@@ -59,29 +57,6 @@ submethod BUILD(*%args) {
     });
 
     return self;
-}
-
-multi method use(Hematite::Plugin:U $plugin, *%config) returns Hematite::App {
-    $plugin.register(self, |%config);
-    return self;
-}
-
-multi method helper(Str $name) {
-    return %!helpers{$name};
-}
-
-multi method helper(Str $name, Callable $fn) returns Hematite::App {
-    # give error if already exists
-    if (%!helpers{$name}:exists) {
-        self.log.warn("helper $( $name ) already registered replacing it");
-    }
-
-    %!helpers{$name} = $fn;
-    return self;
-}
-
-method helpers() returns Hash {
-    return %!helpers.clone;
 }
 
 multi method error-handler(Str $name) returns Callable {

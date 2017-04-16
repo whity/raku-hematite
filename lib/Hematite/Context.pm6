@@ -62,7 +62,11 @@ submethod BUILD(*%args) {
 }
 
 method FALLBACK(Str $name, |args) {
-    my $helper = self.app.helper($name);
+    my $helper = self.stash{"__helper_{ $name }__"};
+    if (!$helper) {
+        return;
+    }
+
     return $helper(self, |@(args));
 }
 
