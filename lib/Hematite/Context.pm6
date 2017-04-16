@@ -81,6 +81,9 @@ method !set-captures(Str $type, $values) {
     return self;
 }
 
+method req() { return self.request; }
+method res() { return self.response; }
+
 # route captures
 multi method captures() returns Array {
     return self!get-captures('list');
