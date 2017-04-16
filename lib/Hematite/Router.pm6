@@ -30,8 +30,13 @@ method groups() {
     return %!groups.clone;
 }
 
-multi method use(Callable $middleware) {
+multi method use(Callable:D $middleware) {
     @!middlewares.push($middleware);
+    return self;
+}
+
+multi method use(Callable:U $middleware, *%options) {
+    @!middlewares.push($middleware.new(|%options));
     return self;
 }
 
