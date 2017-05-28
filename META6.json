@@ -1,6 +1,7 @@
 {
     "depends" : [
           "Crust",
+          "Template::Mustache",
           "MIME::Types"
        ]
 }
