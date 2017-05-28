@@ -1,5 +1,4 @@
 use Hematite::App;
-use Hematite::Exceptions;
 
 unit class Hematite;
 
