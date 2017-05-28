@@ -1,11 +1,10 @@
 use MONKEY-SEE-NO-EVAL;
 use HTTP::Status;
+use MIME::Types;
+use Log;
 use Hematite::Request;
 use Hematite::Response;
 use Hematite::Exceptions;
-use JSON::Fast;
-use MIME::Types;
-use Log;
 
 unit class Hematite::Context;
 
@@ -249,20 +248,6 @@ multi method url-for-route(Str $name, *%query) {
     return self.url-for-route($name, [], |%query);
 }
 
-# method render(Str $template, *%options) {}
-#   options:
-#       - as_string => by default False, otherwise just return the string doesn't set the response
-#       - format    => by default 'html', the full template name to search will be $template.$format
-#                      this also affects the response content-type
-
-# method render-json($data, *%options) {}
-#   options:
-#       - as_string => by default False, otherwise just return the string doesn't set the response
-
-method render-to-string($data, *%options) {
-    return self!render-to-string($data, %options);
-}
-
 method !render-to-string($data, %options) {
     my $type = %options{'type'};
     if (!$type) {
@@ -272,11 +257,11 @@ method !render-to-string($data, %options) {
 
     %options{'type'} = $type = lc($type);
 
-    if ($type ne 'json') {
-        die('render not implemented yet');
-    }
+    return self.app.render-handler($type)($data, |%options);
+}
 
-    return to-json($data);
+method render-to-string($data, *%options) {
+    return self!render-to-string($data, %options);
 }
 
 method render($data, *%options) {

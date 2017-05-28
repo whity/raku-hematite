@@ -1,16 +1,19 @@
 use HTTP::Status;
 use Cookie::Baker;
+use JSON::Fast;
 use Log;
 use Hematite::Context;
 use Hematite::Router;
 use Hematite::Response;
 use Hematite::Exceptions;
+use Hematite::Templates;
 
 unit class Hematite::App is Hematite::Router;
 
-has Callable %!error_handlers = ();
+has Callable %!render_handlers       = ();
+has Callable %!error_handlers        = ();
 has Hematite::Route %!routes_by_name = ();
-has %.config = ();
+has %.config                         = ();
 has Log $.log;
 
 method new(*%args) {
@@ -56,6 +59,20 @@ submethod BUILD(*%args) {
         $res.content = $body;
     });
 
+    # default render handlers
+
+    self.render-handler('template', Hematite::Templates.new(|%args));
+    self.render-handler('json', sub ($data, *%args) { return to-json($data); });
+
+    return self;
+}
+
+multi method render-handler(Str $name) returns Callable {
+    return %!render_handlers{$name};
+}
+
+multi method render-handler(Str $name, Callable $fn) {
+    %!render_handlers{$name} = $fn;
     return self;
 }
 
