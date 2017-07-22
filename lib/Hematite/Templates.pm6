@@ -10,7 +10,7 @@ has %!cache  = ();
 submethod BUILD(Str :$directory, Str :$extension) {
     $!directory = $directory || $*CWD ~ '/templates';
 
-    $!extension = $extension // '.mustache';
+    $!extension = $extension || '.mustache';
     if ( !$!extension.substr-eq(".", 0) ) {
         $!extension = ".{ $!extension }";
     }
