@@ -38,6 +38,8 @@ submethod BUILD(*%args) {
         pattern => '[%d][%X{request_id}][%c] %m%n',
         level   => $!app.log.level,
         output  => $!app.log.output,
+        mdc     => $!app.log.mdc.Hash,
+        ndc     => $!app.log.ndc.Array,
     );
 
     self.log.mdc.put('request_id',
@@ -55,7 +57,7 @@ submethod BUILD(*%args) {
         }
     }
 
-    self.log.debug('processing request: ' ~ $!request.uri);
+    self.log.debug("processing request: " ~ $!request.uri);
 
     return self;
 }
