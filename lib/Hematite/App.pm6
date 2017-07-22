@@ -24,7 +24,8 @@ method new(*%args) {
 submethod BUILD(*%args) {
     %!config = %args;
 
-    $!log = Log.new(level => %!config{'log_level'} || Log::INFO);
+    # get the 'main' log that could be defined anywhere
+    $!log = Log.get;
 
     # default handler
     self.error-handler('unexpected', sub ($ctx, *%args) {
@@ -62,7 +63,7 @@ submethod BUILD(*%args) {
 
     # default render handlers
 
-    self.render-handler('template', Hematite::Templates.new(|%args));
+    self.render-handler('template', Hematite::Templates.new(|(%args{'templates'} || {})));
     self.render-handler('json', sub ($data, *%args) { return to-json($data); });
 
     return self;
