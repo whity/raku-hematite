@@ -9,7 +9,7 @@ use Hematite::Exceptions;
 use Hematite::Templates;
 use Hematite::Handler;
 
-unit class Hematite::App is Hematite::Router;
+unit class Hematite::App is Hematite::Router does Callable;
 
 has Callable %!render_handlers       = ();
 has Callable %!error_handlers        = ();
@@ -17,12 +17,17 @@ has Hematite::Route %!routes_by_name = ();
 has %.config                         = ();
 has Log $.log;
 
+has Hematite::Handler $!handler;
+has Lock $!lock;
+
 method new(*%args) {
     return self.bless(|%args);
 }
 
 submethod BUILD(*%args) {
     %!config = %args;
+
+    $!lock = Lock.new;
 
     # get the 'main' log that could be defined anywhere
     $!log = Log.get;
@@ -69,6 +74,10 @@ submethod BUILD(*%args) {
     return self;
 }
 
+method CALL-ME(Hash $env) {
+    return self._handler.($env);
+}
+
 multi method render-handler(Str $name) returns Callable {
     return %!render_handlers{$name};
 }
@@ -107,31 +116,37 @@ method get-route(Str $name) {
     return %!routes_by_name{$name};
 }
 
-method handler() returns Callable {
-    # prepare routes
-    self.log.debug('preparing routes...');
-    my @routes = self._prepare-routes;
-    for @routes -> $route {
-        if ($route.name) {
-            %!routes_by_name{$route.name} = $route;
-        }
-    }
-
-    # prepare main middleware
-    self.log.debug('preparing middleware...');
-    self.use(sub ($ctx) {
-        for @routes -> $route {
-            if ($route.match($ctx)) {
-                $route($ctx);
-                return;
+method _handler() returns Callable {
+    $!lock.protect({
+        if (!$!handler) {
+            # prepare routes
+            self.log.debug('preparing routes...');
+            my @routes = self._prepare-routes;
+            for @routes -> $route {
+                if ($route.name) {
+                    %!routes_by_name{$route.name} = $route;
+                }
             }
+
+            # prepare main middleware
+            self.log.debug('preparing middleware...');
+            self.use(sub ($ctx) {
+                for @routes -> $route {
+                    if ($route.match($ctx)) {
+                        $route($ctx);
+                        return;
+                    }
+                }
+
+                $ctx.not-found;
+            });
+            my $stack = self._prepare-middleware(self.middlewares);
+
+            $!handler = Hematite::Handler.new(app => self, stack => $stack);
         }
-
-        $ctx.not-found;
     });
-    my $stack = self._prepare-middleware(self.middlewares);
 
-    return Hematite::Handler.new(app => self, stack => $stack);
+    return $!handler;
 }
 
 method _prepare-routes() returns Array {
