@@ -15,7 +15,7 @@ sub MAIN() {
     }
 
     # create the test handler
-    my $test = Crust::Test.create($app.handler);
+    my $test = Crust::Test.create(sub ($env) { start { $app($env); }; });
 
     # test the routes
     for @methods -> $method {

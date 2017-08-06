@@ -25,8 +25,7 @@ sub MAIN() {
     $app.GET('/complex.json', sub ($ctx) { $ctx.render(%complex_structure); } );
 
     # create the test handler
-    my $test = Crust::Test.create($app.handler);
-
+    my $test = Crust::Test.create(sub ($env) { start { $app($env); }; });
 
     {
         my $res = $test.request(HTTP::Request.new(GET => "/simple.json"));
