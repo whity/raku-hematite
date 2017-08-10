@@ -1,8 +1,7 @@
+use MONKEY-SEE-NO-EVAL;
 use Crust::Request;
 
 unit class Hematite::Request is Crust::Request;
-
-use MONKEY-SEE-NO-EVAL;
 
 has $!body_params  = Nil;
 has $!query_params = Nil;

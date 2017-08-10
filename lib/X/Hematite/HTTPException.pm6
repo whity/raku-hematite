@@ -1,4 +1,6 @@
-unit class X::Hematite::HTTPException is Exception;
+use X::Hematite::Exception;
+
+unit class X::Hematite::HTTPException is X::Hematite::Exception;
 
 has %!attributes = ();
 

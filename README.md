@@ -19,7 +19,7 @@ $app.use(sub ($ctx, $next) {
 });
 
 class TestMiddleware does Callable {
-    method CALL($ctx, $next) {
+    method CALL-ME($ctx, $next) {
         $next($ctx);
     }
 }
@@ -34,29 +34,63 @@ $app.GET('/', sub ($ctx) { $ctx.render({'route' => '/'}, 'type' => 'json'); });
 #$app.POST('/', sub ($ctx) { $ctx.render({'route' => '/'}, 'type' => 'json'); });
 #$app.METHOD('get', '/', sub ($ctx) { $ctx.render({'route' => '/'}, 'type' => 'json'); });
 
+# route with middleware
 $app.GET(
     '/with-middleware',
     [sub ($ctx, $next) { say 'route middleware'; $next($ctx); }],
     sub ($ctx) { $ctx.render({'route' => '/with-middleware'}, 'type' => 'json'); }
 );
 
+# route with placeholders/captures
 $app.GET(
     '/captures/:c1',
+    sub {
+        say({
+            'captures' => $ctx.captures,
+            'named-captures' => $ctx.named-captures
+        });
+    }
+);
+
+# route rendering json
+$app.GET(
+    '/json',
     sub ($ctx) {
         $ctx.render(
-            {
-                'captures' => $ctx.captures,
-                'named-captures' => $ctx.named-captures
-            },
+            {'hello' => 'world'},
         );
     }
 );
+
+# route rendering template
+$app.GET(
+    '/template',
+    sub ($ctx) {
+        $ctx.render(
+            'hello',
+            data => { name => 'world', }
+        );
+    }
+);
+
+# route rendering inline template/string
+$app.GET(
+    '/template-inline',
+    sub ($ctx) {
+        $ctx.render(
+            'hello {{ name }}',
+            inline => True,
+            data => { name => 'world', }
+        );
+    }
+);
+
 
 # groups
 my $group = $app.group('/group');
 $group.GET('/', sub ($ctx) { $ctx.render({'group' => 1}); });
 
-$app = $app.handler;
+$app;
 ```
 
 ### start crust

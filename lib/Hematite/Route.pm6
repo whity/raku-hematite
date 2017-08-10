@@ -18,7 +18,7 @@ method new(Str $method, Str $pattern, Callable $stack) {
 }
 
 submethod BUILD(Str :$method, Str :$pattern, Callable :$stack) {
-    my $re = $pattern.subst(/\/$/, ""); # remove ending slash
+    my Str $re = $pattern.subst(/\/$/, ""); # remove ending slash
 
     # build regex path
     #   replace ':[word]' by ($<word>)
@@ -35,23 +35,21 @@ submethod BUILD(Str :$method, Str :$pattern, Callable :$stack) {
         $re ~~ s:g/$char/\\$char/;
     }
 
-    $re = EVAL(sprintf('/^%s$/', $re));
-
+    $!re      = EVAL(sprintf('/^%s$/', $re));
     $!method  = $method;
     $!pattern = $pattern;
     $!stack   = $stack;
-    $!re      = $re;
 
     return self;
 }
 
-multi method name() { return $!name; }
-multi method name(Str $name) {
+multi method name() returns Str { return $!name; }
+multi method name(Str $name) returns ::?CLASS {
     $!name = $name;
     return self;
 }
 
-method match(Hematite::Context $ctx) {
+method match(Hematite::Context $ctx) returns Bool {
     my $req = $ctx.request;
 
     if ((self.method eq 'ANY' || self.method eq $req.method) && $req.path ~~ $!re) {

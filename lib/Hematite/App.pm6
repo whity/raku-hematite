@@ -2,10 +2,10 @@ use HTTP::Status;
 use Cookie::Baker;
 use JSON::Fast;
 use Log;
+use X::Hematite;
 use Hematite::Context;
 use Hematite::Router;
 use Hematite::Response;
-use Hematite::Exceptions;
 use Hematite::Templates;
 use Hematite::Handler;
 
@@ -34,8 +34,8 @@ submethod BUILD(*%args) {
 
     # default handler
     self.error-handler('unexpected', sub ($ctx, *%args) {
-        my $ex = %args{'exception'};
-        my $status = 500;
+        my Exception $ex = %args{'exception'};
+        my Int $status   = 500;
 
         $ctx.response.set-code($status);
         $ctx.response.field(Content-Type => 'text/plain');
@@ -50,11 +50,11 @@ submethod BUILD(*%args) {
 
     # halt default handler
     self.error-handler('halt', sub ($ctx, *%args) {
-        my $status  = %args{"status"};
-        my %headers = %(%args{"headers"});
-        my $body = %args{"body"} || get_http_status_msg($status);
+        my Int $status = %args{"status"};
+        my %headers    = %(%args{"headers"});
+        my Str $body   = %args{"body"} || get_http_status_msg($status);
 
-        my $res = $ctx.response;
+        my Hematite::Response $res = $ctx.response;
 
         # set status code
         $res.set-code($status);
@@ -74,7 +74,7 @@ submethod BUILD(*%args) {
     return self;
 }
 
-method CALL-ME(Hash $env) {
+method CALL-ME(Hash $env) returns List {
     return self._handler.($env);
 }
 
@@ -91,7 +91,7 @@ multi method error-handler(Str $name) returns Callable {
     return %!error_handlers{$name};
 }
 
-multi method error-handler(Str $name, Callable $fn) {
+multi method error-handler(Str $name, Callable $fn) returns ::?CLASS {
     %!error_handlers{$name} = $fn;
     return self;
 }
@@ -112,7 +112,7 @@ multi method error-handler(Int $status, Callable $fn) {
     return self.error-handler(~($status), $fn);
 }
 
-method get-route(Str $name) {
+method get-route(Str $name) returns Hematite::Route {
     return %!routes_by_name{$name};
 }
 
@@ -140,7 +140,7 @@ method _handler() returns Callable {
 
                 $ctx.not-found;
             });
-            my $stack = self._prepare-middleware(self.middlewares);
+            my Callable $stack = self._prepare-middleware(self.middlewares);
 
             $!handler = Hematite::Handler.new(app => self, stack => $stack);
         }

@@ -2,6 +2,6 @@ use Hematite::App;
 
 unit class Hematite;
 
-method new(Hematite:U: |args) {
+method new(::?CLASS:U: |args) returns Hematite::App {
     return Hematite::App.new(|%(args));
 }

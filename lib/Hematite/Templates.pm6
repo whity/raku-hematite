@@ -1,11 +1,11 @@
+use X::Hematite;
 use Template::Mustache;
-use Hematite::Exceptions;
 
 unit class Hematite::Templates does Callable;
 
 has Str $.directory;
 has Str $.extension;
-has %!cache  = ();
+has Str %!cache = ();
 
 submethod BUILD(Str :$directory, Str :$extension) {
     $!directory = $directory || $*CWD ~ '/templates';
@@ -18,7 +18,7 @@ submethod BUILD(Str :$directory, Str :$extension) {
     return self;
 }
 
-method render-string(Str $template, :%data = {}, *%args) {
+method render-string(Str $template, :%data = {}, *%args) returns Str {
     return Template::Mustache.render(
         $template,
         %data.clone,
@@ -27,9 +27,9 @@ method render-string(Str $template, :%data = {}, *%args) {
     );
 }
 
-method render-template(Str $name, :%data = {}, *%args) {
+method render-template(Str $name, :%data = {}, *%args) returns Str {
     # check in cache
-    my $template = %!cache{$name};
+    my Str $template = %!cache{$name};
     if (!$template) {
         # build full template file path and check if exists
         my $filepath = "{ self.directory }/{ $name }";
@@ -53,7 +53,7 @@ method render-template(Str $name, :%data = {}, *%args) {
 }
 
 # render($template-name) ; render($template-string, inline => True)
-method render(Str $data, *%args) {
+method render(Str $data, *%args) returns Str {
     if (%args{'inline'}) {
         return self.render-string($data, |%args);
     }

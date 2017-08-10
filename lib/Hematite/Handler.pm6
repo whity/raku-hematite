@@ -7,14 +7,14 @@ has $.app;
 has Callable $.stack;
 
 method CALL-ME(Hash $env) {
-    my $ctx = Hematite::Context.new(self.app, $env);
+    my Hematite::Context $ctx = Hematite::Context.new(self.app, $env);
 
     try {
         # call middleware stack
         self.stack.($ctx);
 
         CATCH {
-            my $ex = $_;
+            my Exception $ex = $_;
 
             default {
                 $ctx.handle-error('unexpected', exception => $ex);
@@ -34,8 +34,8 @@ method CALL-ME(Hash $env) {
     }
 
     # return context response
-    my $status  = $ctx.response.code;
-    my $body    = $ctx.response.content;
+    my Int $status = $ctx.response.code;
+    my $body       = $ctx.response.content;
 
     my @headers = ();
     for $ctx.response.header.hash.kv -> $name, $value {
@@ -47,8 +47,8 @@ method CALL-ME(Hash $env) {
     }
 
     # set content-type charset if not present
-    my $charset = $ctx.response.charset || 'utf8';
-    my $content_type = $ctx.response.content-type || 'text/html';
+    my Str $charset      = $ctx.response.charset || 'utf8';
+    my Str $content_type = $ctx.response.content-type || 'text/html';
     $content_type = "{ $content_type }, charset={ $charset }";
     @headers.push('Content-Type' => $content_type);
 

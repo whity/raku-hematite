@@ -1,6 +1,6 @@
+use X::Hematite;
 use Hematite::Route;
 use Hematite::Context;
-use Hematite::Exceptions;
 
 unit class Hematite::Router;
 
@@ -17,36 +17,36 @@ method FALLBACK($name where /^<[A .. Z]>+$/, |args) {
     return self.METHOD($name, |@(args));
 }
 
-method middlewares() {
+method middlewares() returns Array {
     my @copy = @!middlewares;
     return @copy;
 }
 
-method routes() {
+method routes() returns Array {
     return @!routes.clone;
 }
 
-method groups() {
+method groups() returns Hash {
     return %!groups.clone;
 }
 
-multi method use(Callable:D $middleware) {
+multi method use(Callable:D $middleware) returns ::?CLASS {
     @!middlewares.push($middleware);
     return self;
 }
 
-multi method use(Callable:U $middleware, *%options) {
+multi method use(Callable:U $middleware, *%options) returns ::?CLASS {
     @!middlewares.push($middleware.new(|%options));
     return self;
 }
 
-method group(Str $pattern is copy) {
+method group(Str $pattern is copy) returns ::?CLASS {
     if ($pattern.substr(0, 1) ne "/") {
         $pattern = "/" ~ $pattern;
     }
     $pattern ~~ s/\/$//; # remove ending slash
 
-    my $group = %!groups{$pattern};
+    my Hematite::Router $group = %!groups{$pattern};
     if (!$group) {
         $group = %!groups{$pattern} = Hematite::Router.new;
     }
@@ -54,11 +54,11 @@ method group(Str $pattern is copy) {
     return $group;
 }
 
-multi method METHOD(Str $method, Str $pattern, Callable $fn) {
+multi method METHOD(Str $method, Str $pattern, Callable $fn) returns Hematite::Route {
     return self!create-route($method, $pattern, self!middleware-runner($fn));
 }
 
-multi method METHOD(Str $method, Str $pattern, @middlewares is copy, Callable $fn) {
+multi method METHOD(Str $method, Str $pattern, @middlewares is copy, Callable $fn) returns Hematite::Route {
     # prepare middleware
     my Callable $stack = self._prepare-middleware(@middlewares, $fn);
 
@@ -66,19 +66,19 @@ multi method METHOD(Str $method, Str $pattern, @middlewares is copy, Callable $f
     return self!create-route($method, $pattern, $stack);
 }
 
-method !create-route(Str $method, Str $pattern is copy, Callable $fn) {
+method !create-route(Str $method, Str $pattern is copy, Callable $fn) returns Hematite::Route {
     # add initial slash to pattern
     if ($pattern.substr(0, 1) ne "/") {
         $pattern = "/" ~ $pattern;
     }
 
-    my $route = Hematite::Route.new($method.uc, $pattern, $fn);
+    my Hematite::Route $route = Hematite::Route.new($method.uc, $pattern, $fn);
     @!routes.push($route);
 
     return $route;
 }
 
-method _prepare-routes(Str $parent_pattern, @middlewares is copy) {
+method _prepare-routes(Str $parent_pattern, @middlewares is copy) returns Array {
     my @routes = [];
 
     @middlewares.append(@!middlewares);
@@ -105,8 +105,8 @@ method _prepare-routes(Str $parent_pattern, @middlewares is copy) {
     return @routes;
 }
 
-method _prepare-middleware(@middlewares, Callable $app?) {
-    my $stack = $app;
+method _prepare-middleware(@middlewares, Callable $app?) returns Callable {
+    my Callable $stack = $app;
     for @middlewares.reverse -> $mdw {
         $stack = self!middleware-runner($mdw, $stack);
     }
@@ -114,8 +114,8 @@ method _prepare-middleware(@middlewares, Callable $app?) {
     return $stack;
 }
 
-method !middleware-runner(Callable $mdw, Callable $next?) {
-    my $tmp_next = $next || sub {};
+method !middleware-runner(Callable $mdw, Callable $next?) returns Block {
+    my Callable $tmp_next = $next || sub {};
 
     return sub (Hematite::Context $ctx) {
         try {

@@ -2,9 +2,9 @@ use MONKEY-SEE-NO-EVAL;
 use HTTP::Status;
 use MIME::Types;
 use Log;
+use X::Hematite;
 use Hematite::Request;
 use Hematite::Response;
-use Hematite::Exceptions;
 
 unit class Hematite::Context;
 
@@ -63,6 +63,7 @@ submethod BUILD(*%args) {
 }
 
 method FALLBACK(Str $name, |args) {
+    self.log.debug("helper { $name }");
     my $helper = self.stash{"__helper_{ $name }__"};
     if (!$helper) {
         return;
@@ -75,7 +76,7 @@ method !get-captures(Str $type) {
     return EVAL(%!captures{$type}.perl);
 }
 
-method !set-captures(Str $type, $values) {
+method !set-captures(Str $type, $values) returns ::?CLASS {
     if (%!captures{$type}.defined) {
         self.log.debug('captures already setted, skipping it.');
         return self;
@@ -86,8 +87,8 @@ method !set-captures(Str $type, $values) {
     return self;
 }
 
-method req() { return self.request; }
-method res() { return self.response; }
+method req() returns Hematite::Request  { return self.request; }
+method res() returns Hematite::Response { return self.response; }
 
 # route captures
 multi method captures() returns Array {
@@ -110,17 +111,17 @@ multi method named-captures(%captures) {
 }
 
 multi method halt(*%args) {
-    my $status = %args{'status'} ||= 500;
+    my Int $status = %args{'status'} ||= 500;
 
     # check for status error handler
-    my $handler = self.app.error-handler($status);
+    my Callable $handler = self.app.error-handler($status);
     if (!$handler) {
         $handler = self.app.error-handler('halt');
     }
 
     $handler(self, |%args);
 
-    self.detach;
+    self.detach; # throw Hematite::Exception::DetachException
 }
 
 multi method halt(Int $status) {
@@ -141,7 +142,7 @@ multi method halt(Int $status, %headers is copy, Str $body) {
 
 method not-found() { self.halt(404); }
 
-method try-catch(Block :$try, Block :$catch?, Block :$finally?) {
+method try-catch(Block :$try, Block :$catch?, Block :$finally?) returns ::?CLASS {
     try {
         $try();
 
@@ -168,12 +169,12 @@ method try-catch(Block :$try, Block :$catch?, Block :$finally?) {
         }
     }
 
-    return;
+    return self;
 }
 
 multi method url-for(Str $url is copy, @captures is copy, *%query) returns Str {
     # if the $url hasn't the initial '/' use has context the current url
-    my $full_url = "";
+    my Str $full_url = "";
     if ( $url ~~ /^\// ) { # absolute
         $full_url = self.request.base;
         $full_url = $full_url.subst(/\/$/, "");
@@ -237,20 +238,18 @@ multi method url-for(Str $url is copy, %captures is copy, *%query) returns Str {
 multi method url-for-route(Str $name, $captures, *%query) {
     my $route = self.app.get-route($name);
     if ( !$route ) {
-        # TODO: log warn
-        self.log.warn('');
+        self.log.warn("no route found with name: { $name }");
         return;
     }
 
-    my $pattern = $route.pattern;
-    return self.url-for($pattern, $captures, |%query);
+    return self.url-for($route.pattern, $captures, |%query);
 }
 
 multi method url-for-route(Str $name, *%query) {
     return self.url-for-route($name, [], |%query);
 }
 
-method !render-to-string($data, %options) {
+method !render-to-string($data, %options) returns Str {
     my $type = %options{'type'};
     if (!$type) {
         # if is a Str, by default is a template otherwise is json
@@ -262,32 +261,32 @@ method !render-to-string($data, %options) {
     return self.app.render-handler($type)($data, |%options);
 }
 
-method render-to-string($data, *%options) {
+method render-to-string($data, *%options) returns Str {
     return self!render-to-string($data, %options);
 }
 
-method render($data, *%options) {
+method render($data, *%options) returns ::?CLASS {
     my $result = self!render-to-string($data, %options);
 
-    my $type   = %options{'type'};
-    my $format = lc(%options{'format'} // 'html');
-    my $content_type = $type eq 'template' ?? $format !! $type;
+    my Str $type         = %options{'type'};
+    my Str $format       = lc(%options{'format'} // 'html');
+    my Str $content_type = $type eq 'template' ?? $format !! $type;
     $content_type = $MimeTypes.type($content_type);
 
     # set content-type
     self.response.field(Content-Type => $content_type);
     self.response.content = $result;
 
-    return;
+    return self;
 }
 
 method detach() { X::Hematite::DetachException.new.throw; }
 
-method redirect(Str $url) {
+method redirect(Str $url) returns ::?CLASS {
     self.response.set-code(302);
     self.response.field(location => $url);
 
-    return;
+    return self;
 }
 
 method redirect-and-detach(Str $url) {
@@ -295,17 +294,17 @@ method redirect-and-detach(Str $url) {
     self.detach;
 }
 
-multi method handle-error(Str $type, *%args) {
+method handle-error(Str $type, *%args) returns ::?CLASS {
     try {
-        my $handler = self.app.error-handler($type);
+        my Callable $handler = self.app.error-handler($type);
         if (!$handler) {
-            die("invalid error handler: $( $type )");
+            X::Hematite::ErrorHandlerNotFoundException.new( name => $type, ).throw;
         }
 
         $handler(self, |%args);
 
         CATCH {
-            my $ex = $_;
+            my Exception $ex = $_;
 
             when X::Hematite::DetachException {
                 # don't do nothing, stop handle error process
@@ -313,11 +312,11 @@ multi method handle-error(Str $type, *%args) {
         }
     }
 
-    return;
+    return self;
 }
 
-method stream(Callable $fn) returns Hematite::Context {
-    my $channel = Channel.new;
+method stream(Callable $fn) returns ::?CLASS {
+    my Channel $channel = Channel.new;
     start {
         my $orig_request_id = self.log.mdc.get('request_id');
         self.log.mdc.put('request_id',
@@ -343,12 +342,12 @@ method stream(Callable $fn) returns Hematite::Context {
     return self;
 }
 
-method serve-file(Str $filepath) {
+method serve-file(Str $filepath) returns ::?CLASS {
     # get file extension
-    my $ext = IO::Path.new($filepath).extension;
+    my Str $ext = IO::Path.new($filepath).extension;
 
     # guess content type
-    my $content_type = $MimeTypes.type($ext);
+    my Str $content_type = $MimeTypes.type($ext);
     self.response.content-type($content_type);
 
     # serve file
@@ -356,18 +355,3 @@ method serve-file(Str $filepath) {
 
     return self;
 }
-
-
-#multi method handle-error(Exception $ex) {
-#    my $handler_name = $ex.WHAT.gist;
-#    $handler_name ~~ s:g/\(|\)//;
-#
-#    my $handler = self.app.error-handler($handler_name);
-#    if (!$handler) {
-#        $handler_name = "default";
-#    }
-#
-#    self.handle-error($handler_name, exception => $ex);
-#
-#    return;
-#}
