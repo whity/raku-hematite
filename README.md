@@ -103,6 +103,7 @@ crustup [psgi file]
 ## TODO
 
 - static middleware
+- better doc
 - ...
 
 ## Contributing
