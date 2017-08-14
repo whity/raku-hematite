@@ -104,6 +104,7 @@ crustup [psgi file]
 
 - static middleware
 - better doc
+- unit tests
 - ...
 
 ## Contributing
