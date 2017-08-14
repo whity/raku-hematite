@@ -317,6 +317,18 @@ method handle-error(Str $type, *%args) returns ::?CLASS {
 
 method stream(Callable $fn) returns ::?CLASS {
     my Channel $channel = Channel.new;
+
+    # check in every half a second if the client is still receving the data,
+    # otherwise close the channel
+    # we know the client is receiving is the poll is Nil
+    my $scheduler = $*SCHEDULER.cue(
+        {
+            $channel.close if $channel.poll;
+        },
+        every => 0.5,
+    );
+
+    # start a new thread and run the passed function
     start {
         my $orig_request_id = self.log.mdc.get('request_id');
         self.log.mdc.put('request_id',
@@ -325,6 +337,8 @@ method stream(Callable $fn) returns ::?CLASS {
         self.try-catch(
             try     => sub { $fn(sub ($value) { $channel.send($value); }); },
             catch   => sub ($ex) {
+                return if $ex.isa(X::Channel::SendOnClosed);
+
                 # log the error
                 self.log.error($ex.gist);
             },
@@ -335,7 +349,10 @@ method stream(Callable $fn) returns ::?CLASS {
         );
 
         self.log.mdc.put('request_id', $orig_request_id);
-    };
+    }.then({
+        self.log.debug('stream finished, cancelling the scheduler');
+        $scheduler.cancel;
+    });
 
     self.response.content = $channel;
 
