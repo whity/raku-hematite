@@ -102,7 +102,7 @@ crustup [psgi file]
 
 ## TODO
 
-- logging
+- static middleware
 - ...
 
 ## Contributing
