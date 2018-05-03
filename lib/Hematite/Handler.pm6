@@ -22,7 +22,7 @@ method CALL-ME(Hash $env) {
             my Exception $ex = $_;
 
             default {
-                $ctx.handle-exception($ex);
+                $ctx.handle-error($ex);
             }
         }
     }

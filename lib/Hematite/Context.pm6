@@ -106,18 +106,7 @@ multi method named-captures(%captures) {
 }
 
 multi method halt(*%args) {
-    my Int $status = %args{'status'} ||= 500;
-
-    # check for status error handler
-    my Callable $handler = self.app.error-handler($status);
-    if (!$handler) {
-        $handler = self.app.error-handler(X::Hematite::HaltException);
-    }
-
-    $handler(self, |%args);
-
-    #self.detach; # throw Hematite::Exception::DetachException
-    X::Hematite::HaltException.new.throw;
+    X::Hematite::HaltException.new(status => 500, |%args).throw;
 }
 
 multi method halt($body) {
@@ -289,7 +278,16 @@ method redirect-and-detach(Str $url) {
     self.detach;
 }
 
-method handle-exception(Exception $ex) returns ::?CLASS {
+multi method handle-error(X::Hematite::HaltException $ex) returns ::?CLASS {
+    my Callable $handler = self.app.error-handler($ex.status);
+    $handler ||= self.app.error-handler(X::Hematite::HaltException);
+
+    $handler(self, |$ex.attributes);
+
+    return self;
+}
+
+multi method handle-error(Exception $ex) returns ::?CLASS {
     try {
         my Exception:U $type = $ex.WHAT;
         my @types = $type.^parents;
@@ -305,6 +303,10 @@ method handle-exception(Exception $ex) returns ::?CLASS {
 
         CATCH {
             my Exception $ex = $_;
+
+            when X::Hematite::HaltException {
+                self.handle-error($ex);
+            }
 
             when X::Hematite::DetachException {
                 # don't do nothing, stop handle error process
