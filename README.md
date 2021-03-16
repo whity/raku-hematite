@@ -1,5 +1,7 @@
 # Hematite
 
+[![Build Status](https://travis-ci.org/whity/perl6-hematite.svg?branch=master)](https://travis-ci.org/whity/perl6-hematite)
+
 ## Usage
 
 ```raku
