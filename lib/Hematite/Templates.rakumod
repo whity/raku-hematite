@@ -18,7 +18,7 @@ submethod BUILD(Str :$directory, Str :$extension) {
     return self;
 }
 
-method render-string(Str $template, :%data = {}, *%args) returns Str {
+method render-string(Str $template, :%data = {}, *%args --> Str) {
     return Template::Mustache.render(
         $template,
         %data.clone,
@@ -27,7 +27,7 @@ method render-string(Str $template, :%data = {}, *%args) returns Str {
     );
 }
 
-method render-template(Str $name, :%data = {}, *%args) returns Str {
+method render-template(Str $name, :%data = {}, *%args --> Str) {
     # check in cache
     my Str $template = %!cache{$name};
     if (!$template) {
@@ -53,7 +53,7 @@ method render-template(Str $name, :%data = {}, *%args) returns Str {
 }
 
 # render($template-name) ; render($template-string, inline => True)
-method render(Str $data, *%args) returns Str {
+method render(Str $data, *%args --> Str) {
     if (%args{'inline'}) {
         return self.render-string($data, |%args);
     }

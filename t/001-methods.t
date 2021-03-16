@@ -1,4 +1,4 @@
-use v6;
+#!/usr/bin/env raku
 
 use Test;
 use HTTP::Request;
@@ -19,7 +19,9 @@ sub MAIN() {
 
     # test the routes
     for @methods -> $method {
-        my $res  = $test.request(HTTP::Request.new(|($method => "/{ $method.lc }")));
+        my $req = HTTP::Request.new(|($method => "/{ $method.lc }"));
+        my $res = $test.request($req);
+
         # test status code
         is($res.code, 200, "method { $method }");
     }

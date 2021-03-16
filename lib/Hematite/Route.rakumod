@@ -61,45 +61,64 @@ method match(Hematite::Context $ctx) returns Bool {
 
 method CALL-ME(Hematite::Context $ctx) {
     # guess captures
-    my @captures       = ();
-    my %named_captures = ();
-    my $match          = $ctx.request.path.match($!re);
-    my @match_groups   = $match.list;
-    for @match_groups -> $group {
+    my $match    = $ctx.request.path.match($!re);
+    my %captures = self._find-captures($match);
+
+    if (%captures<list>.elems > 0) {
+        $ctx.log.debug("captures found: ");
+        $ctx.log.debug(" - named: " ~ ~(%captures<named>));
+        $ctx.log.debug(" - list: " ~ ~(%captures<list>));
+    }
+
+    # set captures on context
+    $ctx.named-captures(%captures<named>);
+    $ctx.captures(%captures<list>);
+
+    return self.stack.($ctx);
+}
+
+method _find-captures($match) returns Hash {
+    my @groups = $match.list;
+
+    my @list  = ();
+    my %named = ();
+
+    for @groups -> $group {
         my %named_caps = $group.hash;
         if (!%named_caps) {
-            @captures.push($group.Str);
+            @list.push($group.Str);
             next;
         }
 
         # check if group.hash has keys, if not it's a simple group
         for %named_caps.kv -> $key, $value {
-            my $vl = $value.Str;
-            @captures.push($vl);
+            next if !$key;
 
-            if (%named_captures{$key}:exists) {
-                my $cur_value = %named_captures{$key};
+            my $vl = $value.Str;
+            @list.push($vl);
+
+            if (%named{$key}:exists) {
+                my $cur_value = %named{$key};
                 if (!$cur_value.isa(Array)) {
                     $cur_value = [$cur_value];
                 }
                 $cur_value.push($vl);
-                %named_captures{$key} = $cur_value;
+                %named{$key} = $cur_value;
                 next;
             }
 
-            %named_captures{$key} = $vl;
+            %named{$key} = $vl;
         }
+
+        # check group.list and add the captures
+        my %result = self._find-captures($group);
+
+        @list.append(@(%result<list>));
+        %named.append(%(%result<named>));
     }
 
-    if (@captures.elems > 0) {
-        $ctx.log.debug("captures found: ");
-        $ctx.log.debug(" - named: " ~ ~(%named_captures));
-        $ctx.log.debug(" - list: " ~ ~(@captures));
-    }
-
-    # set captures on context
-    $ctx.named-captures(%named_captures);
-    $ctx.captures(@captures);
-
-    return self.stack.($ctx);
+    return {
+        'list'  => @list,
+        'named' => %named,
+    };
 }

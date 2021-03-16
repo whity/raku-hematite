@@ -10,52 +10,55 @@ has $!query_params = Nil;
 
 # instance methods
 
-multi method FALLBACK(Str $name where /^accepts\-(\w+)$/) returns Bool {
+multi method FALLBACK(Str $name where /^accepts\-(\w+)$/ --> Bool) {
     my $type    = ($name ~~ /^accepts\-(\w+)$/)[0];
     my @accepts = self.accepts;
 
     return @accepts.first(-> $item { $item ~~ /$type/ }) ?? True !! False;
 }
 
-method body-parameters() returns Hash {
+method body-parameters(--> Hash) {
     if (!$!body_params.defined) {
         $!body_params = parse-params(callsame.all-pairs);
     }
 
-    return $!body_params.perl.EVAL;
+    # return a clone, not the original structure
+    return $!body_params.raku.EVAL;
 }
 
-method body-params() { return self.body-parameters; }
+method body-params { return self.body-parameters; }
 
-method query-parameters() returns Hash {
+method query-parameters(--> Hash) {
     if (!$!query_params.defined) {
         my @pairs = callsame.all-pairs;
         $!query_params = parse-params(@pairs);
     }
 
-    return $!query_params.perl.EVAL;
+    # return a clone, not the original structure
+    return $!query_params.raku.EVAL;
 }
 
-method query-params() { return self.query-parameters; }
+method query-params { return self.query-parameters; }
 
-method is-xhr() returns Bool {
+method is-xhr(--> Bool) {
     my $header = self.header('x-requested-with');
 
-    return False if (!$header || $header.lc ne 'xmlhttprequest');
+    return False if !$header || $header.lc ne 'xmlhttprequest';
     return True;
 }
 
-method accepts() returns Array {
+method accepts(--> Array) {
     my $accepts = self.headers.header('accept') || '';
-    my @matches = ($accepts ~~ m:g/(\w+\/\w+)\,?/);
+    my $matches = $accepts ~~ m:g/(\w+\/\w+)\,?/;
 
-    return [] if !@matches;
+    return [] if !$matches;
 
-    @matches = @matches.map(-> $item { $item[0] });
-    return @matches;
+    $matches = $matches.map(-> $item { $item.Str });
+
+    return [$matches.Array];
 }
 
-method json() {
+method json {
     my $supply = self.body;
     my $body   = "";
 
@@ -67,7 +70,7 @@ method json() {
 
 # helper functions
 
-sub parse-params(@items) returns Hash {
+sub parse-params(@items --> Hash) {
     my %params = ();
     for @items -> $item {
         my $key = $item.key;
@@ -84,5 +87,5 @@ sub parse-params(@items) returns Hash {
         %params{$key} = $value;
     }
 
-    return %params;
+    return {%params};
 }

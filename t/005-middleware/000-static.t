@@ -1,4 +1,4 @@
-use v6;
+#!/usr/bin/env raku
 
 use Test;
 use HTTP::Request;
@@ -9,7 +9,11 @@ use Hematite::Middleware::Static;
 sub MAIN() {
     my $app = Hematite.new;
 
-    $app.use(Hematite::Middleware::Static.new(public_dir => $?FILE.IO.dirname ~ '/../test-files/'));
+    $app.use(
+        Hematite::Middleware::Static.create(
+            public_dir => $?FILE.IO.dirname ~ '/../test-files/'
+        )
+    );
 
     # create the test handler
     my $test = Crust::Test.create(sub ($env) { start { $app($env); }; });
@@ -25,6 +29,9 @@ sub MAIN() {
     # serving invalid file, should return not found
     {
         my $res = $test.request(HTTP::Request.new(GET => '/dummy-file.txt2'));
+
+        say $res.decoded-content;
+
         is-deeply($res.code, 404, 'static middleware serving unexistant file');
     }
 

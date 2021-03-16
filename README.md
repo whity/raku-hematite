@@ -2,7 +2,7 @@
 
 ## Usage
 
-```perl6
+```raku
 # psgi file
 use Hematite;
 
@@ -99,6 +99,38 @@ $app;
 crustup [psgi file]
 ```
 
+### using a more OO approach
+
+```raku
+
+class ExampleMiddleware does Hematite::Middleware {
+    method CALL-ME {
+        say 'example-middleware';
+        return self.next;
+    }
+}
+
+class ExampleAction does Hematite::Action {
+    method middleware {
+        return [
+            ExampleMiddleware.create,
+        ];
+    }
+
+    method CALL-ME {
+        return self.render('example action', inline => True);
+    }
+}
+
+class App is Hematite::App {
+    method startup {
+        self.use(ExampleMiddleware.create);
+
+        self.GET('/', ExampleAction.create);
+        self.POST('/', 'ExampleAction');
+    }
+}
+```
 
 ## TODO
 

@@ -1,6 +1,7 @@
 use X::Hematite;
 use Hematite::Route;
 use Hematite::Context;
+use Hematite::Action;
 
 unit class Hematite::Router;
 
@@ -8,8 +9,8 @@ has Callable @!middlewares    = ();
 has Hematite::Router %!groups = ();
 has Hematite::Route @!routes  = ();
 
-method new() {
-    return self.bless();
+method new {
+    return self.bless;
 }
 
 # fallback for the http method
@@ -17,25 +18,25 @@ method FALLBACK($name where /^<[A .. Z]>+$/, |args) {
     return self.METHOD($name, |@(args));
 }
 
-method middlewares() returns Array {
+method middlewares(--> Array) {
     my @copy = @!middlewares;
     return @copy;
 }
 
-method routes() returns Array {
+method routes(--> Array) {
     return @!routes.clone;
 }
 
-method groups() returns Hash {
+method groups(--> Hash) {
     return %!groups.clone;
 }
 
-multi method use(Callable:D $middleware) returns ::?CLASS {
+multi method use(Callable:D $middleware --> ::?CLASS) {
     @!middlewares.push($middleware);
     return self;
 }
 
-method group(Str $pattern is copy) returns ::?CLASS {
+method group(Str $pattern is copy --> ::?CLASS) {
     if ($pattern.substr(0, 1) ne "/") {
         $pattern = "/" ~ $pattern;
     }
@@ -49,11 +50,11 @@ method group(Str $pattern is copy) returns ::?CLASS {
     return $group;
 }
 
-multi method METHOD(Str $method, Str $pattern, Callable $fn) returns Hematite::Route {
+multi method METHOD(Str $method, Str $pattern, Callable $fn --> Hematite::Route) {
     return self!create-route($method, $pattern, self!middleware-runner($fn));
 }
 
-multi method METHOD(Str $method, Str $pattern, @middlewares is copy, Callable $fn) returns Hematite::Route {
+multi method METHOD(Str $method, Str $pattern, @middlewares is copy, Callable $fn --> Hematite::Route) {
     # prepare middleware
     my Callable $stack = self._prepare-middleware(@middlewares, $fn);
 
@@ -61,7 +62,32 @@ multi method METHOD(Str $method, Str $pattern, @middlewares is copy, Callable $f
     return self!create-route($method, $pattern, $stack);
 }
 
-method !create-route(Str $method, Str $pattern is copy, Callable $fn) returns Hematite::Route {
+multi method METHOD(Str $method, Str $pattern, Str $action) {
+
+    # first, check if the action module is already loaded
+    #   if not, lets try to load it.
+
+    my $module;
+
+    try {
+        $module = ::($action);
+
+        CATCH {
+            when X::NoSuchSymbol {
+                require $action;
+                $module = ::($action);
+            }
+        }
+    };
+
+    if ($module.does(Hematite::Action)) {
+        return self."{$method}"($pattern, |$module.create);
+    }
+
+    return self."{$method}"($pattern, $module);
+}
+
+method !create-route(Str $method, Str $pattern is copy, Callable $fn --> Hematite::Route) {
     # add initial slash to pattern
     if ($pattern.substr(0, 1) ne "/") {
         $pattern = "/" ~ $pattern;
@@ -73,7 +99,7 @@ method !create-route(Str $method, Str $pattern is copy, Callable $fn) returns He
     return $route;
 }
 
-method _prepare-routes(Str $parent_pattern, @middlewares is copy) returns Array {
+method _prepare-routes(Str $parent_pattern, @middlewares is copy --> Array) {
     my @routes = [];
 
     @middlewares.append(@!middlewares);
@@ -100,7 +126,7 @@ method _prepare-routes(Str $parent_pattern, @middlewares is copy) returns Array 
     return @routes;
 }
 
-method _prepare-middleware(@middlewares, Callable $app?) returns Callable {
+method _prepare-middleware(@middlewares, Callable $app? --> Callable) {
     my Callable $stack = $app;
     for @middlewares.reverse -> $mdw {
         $stack = self!middleware-runner($mdw, $stack);
@@ -109,11 +135,15 @@ method _prepare-middleware(@middlewares, Callable $app?) returns Callable {
     return $stack;
 }
 
-method !middleware-runner(Callable $mdw, Callable $next?) returns Block {
+method !middleware-runner(Callable $mdw, Callable $next? --> Block) {
     my Callable $tmp_next = $next || sub {};
 
     return sub (Hematite::Context $ctx) {
         try {
+            # TODO: support a more OO approach e.g.
+            #   the middleware can be a class (does the role Action or role Middleware)
+            #   call it in the following way: mdw.new($ctx, $tmp_next).()
+
             my Int $arity = Nil;
             if ($mdw.isa(Code)) {
                 $arity = $mdw.arity;

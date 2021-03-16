@@ -3,8 +3,6 @@ perl6:
     - latest
 install:
     - rakudobrew build zef
-    - zef install Template::Mustache MIME::Types Log
-    - zef install Crust --force-test
+    - zef install --deps-only . --force-test
 script:
     - ./run-tests
-

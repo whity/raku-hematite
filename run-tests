@@ -1,1 +1,1 @@
-prove -rv -e "perl6 -I ./lib" t
+prove -rv -e "raku -I ./lib" t

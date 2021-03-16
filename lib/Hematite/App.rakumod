@@ -1,7 +1,6 @@
 use HTTP::Status;
-use Cookie::Baker;
 use JSON::Fast;
-use Log;
+use Logger;
 use X::Hematite;
 use Hematite::Context;
 use Hematite::Router;
@@ -16,7 +15,7 @@ has Callable %!exception_handlers    = ();
 has Callable %!halt_handlers{Int}    = ();
 has Hematite::Route %!routes_by_name = ();
 has %.config                         = ();
-has Log $.log;
+has Logger $.log;
 
 has Hematite::Handler $!handler;
 has Lock $!lock;
@@ -29,11 +28,11 @@ method new(*%args) {
 }
 
 submethod BUILD(*%args) {
-    %!config         = %args;
-    $!lock           = Lock.new;
+    %!config = %args;
+    $!lock   = Lock.new;
 
     # get the 'main' log that could be defined anywhere
-    $!log = Log.get;
+    $!log = Logger.get;
 
     # error/exception default handler
     self.error-handler(sub ($ctx, *%args) {
@@ -43,9 +42,9 @@ submethod BUILD(*%args) {
         $ctx.halt(
             status  => 500,
             body    => $body,
-            headers => %(
+            headers => {
                 'Content-Type' => 'text/plain',
-            ),
+            },
         );
 
         # log exception
@@ -57,7 +56,7 @@ submethod BUILD(*%args) {
     # halt default handler
     self.error-handler(X::Hematite::HaltException, sub ($ctx, *%args) {
         my Int $status = %args<status>;
-        my %headers    = %(%args<headers>);
+        my %headers    = %args<headers>.Hash;
         my $body       = %args<body> || get_http_status_msg($status);
 
         my Hematite::Response $res = $ctx.response;
@@ -73,11 +72,11 @@ submethod BUILD(*%args) {
             %render_options<format> = 'text';
         }
 
-        # render
         $ctx.render($body, |%render_options,);
 
-        # set headers
-        $res.field(|%headers);
+        # set response headers
+        $res.headers.clear();
+        $res.headers.from-hash(%headers);
 
         return;
     });
@@ -86,14 +85,16 @@ submethod BUILD(*%args) {
     self.render-handler('template', Hematite::Templates.new(|(%args{'templates'} || %())));
     self.render-handler('json', sub ($data, *%args) { return to-json($data); });
 
+    self.startup if self.can('startup');
+
     return self;
 }
 
-method CALL-ME(Hash $env) returns List {
+method CALL-ME(Hash $env --> Array) {
     return self._handler.($env);
 }
 
-multi method render-handler(Str $name) returns Callable {
+multi method render-handler(Str $name --> Callable) {
     return %!render_handlers{$name};
 }
 
@@ -102,16 +103,16 @@ multi method render-handler(Str $name, Callable $fn) {
     return self;
 }
 
-multi method error-handler(Exception:U $type) returns Callable {
+multi method error-handler(Exception:U $type --> Callable) {
     return %!exception_handlers{$type.^name};
 }
 
-multi method error-handler(Exception:U $type, Callable $fn) returns ::?CLASS {
+multi method error-handler(Exception:U $type, Callable $fn --> ::?CLASS) {
     %!exception_handlers{$type.^name} = $fn;
     return self;
 }
 
-multi method error-handler() {
+multi method error-handler {
     return self.error-handler(Exception);
 }
 
@@ -119,16 +120,16 @@ multi method error-handler(Callable $fn) {
     return self.error-handler(Exception, $fn);
 }
 
-multi method error-handler(Int $status) returns Callable {
+multi method error-handler(Int $status --> Callable) {
     return %!halt_handlers{$status};
 }
 
-multi method error-handler(Int $status, Callable $fn) returns ::?CLASS {
+multi method error-handler(Int $status, Callable $fn --> ::?CLASS) {
     %!halt_handlers{$status} = $fn;
     return self;
 }
 
-method get-route(Str $name) returns Hematite::Route {
+method get-route(Str $name --> Hematite::Route) {
     return %!routes_by_name{$name};
 }
 
@@ -141,40 +142,48 @@ multi method helper(Str $name) {
     return %!helpers{$name};
 }
 
-method _handler() returns Callable {
-    $!lock.protect({
-        if (!$!handler) {
-            # prepare routes
-            self.log.debug('preparing routes...');
-            my @routes = self._prepare-routes;
+method _handler(--> Callable) {
+    $!lock.protect(sub {
+        return if $!handler;
+
+        # prepare routes
+        self.log.debug('preparing routes...');
+
+        my @routes = self._prepare-routes;
+        for @routes -> $route {
+            if ($route.name) {
+                %!routes_by_name{$route.name} = $route;
+            }
+        }
+
+        # prepare main middleware
+        self.log.debug('preparing middleware...');
+
+        self.use(sub ($ctx) {
             for @routes -> $route {
-                if ($route.name) {
-                    %!routes_by_name{$route.name} = $route;
-                }
+                next if !$route.match($ctx);
+
+                $route($ctx);
+                return;
             }
 
-            # prepare main middleware
-            self.log.debug('preparing middleware...');
-            self.use(sub ($ctx) {
-                for @routes -> $route {
-                    if ($route.match($ctx)) {
-                        $route($ctx);
-                        return;
-                    }
-                }
+            $ctx.not-found;
+        });
 
-                $ctx.not-found;
-            });
-            my Callable $stack = self._prepare-middleware(self.middlewares);
+        my Callable $stack = self._prepare-middleware(self.middlewares);
+        my $context_class  = %.config<context_class> || Hematite::Context;
 
-            $!handler = Hematite::Handler.new(app => self, stack => $stack);
-        }
+        $!handler = Hematite::Handler.new(
+            app           => self,
+            stack         => $stack,
+            context_class => $context_class,
+        );
     });
 
     return $!handler;
 }
 
-method _prepare-routes() returns Array {
+method _prepare-routes(--> Array) {
     my @routes = self.routes;
 
     # sub-routers
