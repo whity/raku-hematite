@@ -1,7 +1,5 @@
 # Hematite
 
-[![Build Status](https://travis-ci.com/whity/raku-hematite.svg?branch=master)](https://travis-ci.com/whity/raku-hematite)
-
 ## Usage
 
 ```raku
