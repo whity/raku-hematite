@@ -1,6 +1,6 @@
 # Hematite
 
-[![Build Status](https://travis-ci.org/whity/perl6-hematite.svg?branch=master)](https://travis-ci.org/whity/perl6-hematite)
+[![Build Status](https://travis-ci.org/whity/raku-hematite.svg?branch=master)](https://travis-ci.org/whity/raku-hematite)
 
 ## Usage
 
@@ -142,7 +142,7 @@ class App is Hematite::App {
 
 ## Contributing
 
-1. Fork it ( https://github.com/[your-github-name]/perl6-hematite/fork )
+1. Fork it ( https://github.com/[your-github-name]/raku-hematite/fork )
 2. Create your feature branch (git checkout -b my-new-feature)
 3. Commit your changes (git commit -am 'Add some feature')
 4. Push to the branch (git push origin my-new-feature)
