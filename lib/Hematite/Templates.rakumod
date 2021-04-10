@@ -1,7 +1,7 @@
-use X::Hematite;
-use Template::Mustache;
-
 unit class Hematite::Templates does Callable;
+
+use Template::Mustache;
+use X::Hematite;
 
 has Str $.directory;
 has Str $.extension;
@@ -12,40 +12,45 @@ submethod BUILD(Str :$directory, Str :$extension) {
 
     $!extension = $extension || '.mustache';
     if ( !$!extension.substr-eq(".", 0) ) {
-        $!extension = ".{ $!extension }";
+        $!extension = ".{$!extension}";
     }
 
     return self;
 }
 
 method render-string(Str $template, :%data = {}, *%args --> Str) {
+    my $format = %args<format>;
+
     return Template::Mustache.render(
         $template,
         %data.clone,
         from      => [self.directory],
-        extension => self.extension,
+        extension => ".{$format}{self.extension}",
     );
 }
 
-method render-template(Str $name, :%data = {}, *%args --> Str) {
+method render-template(Str $name is copy, :%data = {}, *%args --> Str) {
+    my $format = %args<format>;
+
+    $name ~= ".{$format}";
+
     # check in cache
     my Str $template = %!cache{$name};
     if (!$template) {
         # build full template file path and check if exists
-        my $filepath = "{ self.directory }/{ $name }";
-        if (!$filepath.IO.extension) {
-            # if no extension, by default use 'html'
-            $filepath ~= "{ self.extension }";
-        }
+        my $filepath = "{self.directory}/{$name}";
+
+        $filepath ~= self.extension;
 
         # if file doesn't exists, throw error
         $filepath = $filepath.IO;
         if (!$filepath.e) {
-            X::Hematite::TemplateNotFoundException.new(
-                path => $filepath.Str).throw;
+            die X::Hematite::TemplateNotFoundException.new(
+                path => $filepath.Str
+            );
         }
 
-        $template = $filepath.slurp;
+        $template      = $filepath.slurp;
         %!cache{$name} = $template;
     }
 
@@ -53,12 +58,15 @@ method render-template(Str $name, :%data = {}, *%args --> Str) {
 }
 
 # render($template-name) ; render($template-string, inline => True)
-method render(Str $data, *%args --> Str) {
-    if (%args{'inline'}) {
-        return self.render-string($data, |%args);
-    }
+method render($data, *%args --> List) {
+    my $str = ($data || '').Str;
 
-    return self.render-template($data, |%args);
+    %args<format> ||= 'html';
+
+    my $content_type = %args<mime_types>.type(%args<format>);
+
+    return (self.render-string($str, |%args), $content_type) if %args<inline>;
+    return (self.render-template($str, |%args), $content_type);
 }
 
 method CALL-ME($data, |args) {

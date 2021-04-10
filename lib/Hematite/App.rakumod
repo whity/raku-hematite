@@ -1,24 +1,26 @@
+use Hematite::Router;
+
+unit class Hematite::App is Hematite::Router does Callable;
+
 use HTTP::Status;
 use JSON::Fast;
 use Logger;
-use X::Hematite;
 use Hematite::Context;
-use Hematite::Router;
 use Hematite::Response;
 use Hematite::Templates;
 use Hematite::Handler;
+use X::Hematite;
 
-unit class Hematite::App is Hematite::Router does Callable;
+my Lock $Lock = Lock.new;
 
 has Callable %!render_handlers       = ();
 has Callable %!exception_handlers    = ();
 has Callable %!halt_handlers{Int}    = ();
 has Hematite::Route %!routes_by_name = ();
 has %.config                         = ();
-has Logger $.log;
+has Logger $.log is rw;
 
 has Hematite::Handler $!handler;
-has Lock $!lock;
 
 subset Helper where .signature ~~ :($ctx, |args);
 has Helper %!helpers = ();
@@ -29,7 +31,6 @@ method new(*%args) {
 
 submethod BUILD(*%args) {
     %!config = %args;
-    $!lock   = Lock.new;
 
     # get the 'main' log that could be defined anywhere
     $!log = Logger.get;
@@ -82,8 +83,10 @@ submethod BUILD(*%args) {
     });
 
     # default render handlers
-    self.render-handler('template', Hematite::Templates.new(|(%args{'templates'} || %())));
-    self.render-handler('json', sub ($data, *%args) { return to-json($data); });
+    self.render-handler('template', Hematite::Templates.new(|(%args<templates> || %())));
+    self.render-handler('json', sub ($data, *%args) {
+        return (to-json($data), 'application/json');
+    });
 
     self.startup if self.can('startup');
 
@@ -133,17 +136,17 @@ method get-route(Str $name --> Hematite::Route) {
     return %!routes_by_name{$name};
 }
 
-multi method helper(Str $name, Helper $fn) {
+multi method context-helper(Str $name, Helper $fn --> ::?CLASS) {
     %!helpers{$name} = $fn;
     return self;
 }
 
-multi method helper(Str $name) {
+multi method context-helper(Str $name --> Helper) {
     return %!helpers{$name};
 }
 
 method _handler(--> Callable) {
-    $!lock.protect(sub {
+    $Lock.protect(sub {
         return if $!handler;
 
         # prepare routes

@@ -1,4 +1,4 @@
-use v6;
+#!/usr/bin/env raku
 
 use Test;
 use JSON::Fast;
@@ -10,7 +10,7 @@ sub MAIN() {
     my $app = Hematite.new();
 
     my %simple_structure = ('hello' => 'world');
-    $app.GET('/simple.json', sub ($ctx) { $ctx.render(%simple_structure); } );
+    $app.GET('/simple.json', sub ($ctx) { $ctx.render-json(%simple_structure); } );
 
     my %complex_structure = (
         'hello' => 'world',
@@ -22,7 +22,8 @@ sub MAIN() {
             'key2' => 2,
         }
     );
-    $app.GET('/complex.json', sub ($ctx) { $ctx.render(%complex_structure); } );
+
+    $app.GET('/complex.json', sub ($ctx) { $ctx.render-json(%complex_structure); } );
 
     # create the test handler
     my $test = Crust::Test.create(sub ($env) { start { $app($env); }; });

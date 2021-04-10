@@ -11,19 +11,19 @@ sub MAIN() {
 
     # create the app routes
     $app.GET('/key/:key', sub ($ctx) {
-        $ctx.render({
+        $ctx.render-json({
             'named' => $ctx.named-captures,
             'list'  => $ctx.captures,
         });
     });
     $app.GET('/keys/:key1/:key2', sub ($ctx) {
-        $ctx.render({
+        $ctx.render-json({
             'named' => $ctx.named-captures,
             'list'  => $ctx.captures,
         });
     });
     $app.GET('/key1/:key1/key2/:key2', sub ($ctx) {
-        $ctx.render({
+        $ctx.render-json({
             'named' => $ctx.named-captures,
             'list'  => $ctx.captures,
         });

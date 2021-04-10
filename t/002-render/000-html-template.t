@@ -1,4 +1,4 @@
-use v6;
+#!/usr/bin/env raku
 
 use Test;
 use HTTP::Request;
@@ -17,7 +17,7 @@ sub MAIN() {
         },
     );
 
-    $app.GET('/file', sub ($ctx) { $ctx.render('html', data => %templates_data); } );
+    $app.GET('/file', sub ($ctx) { $ctx.render('index', data => %templates_data); } );
 
     $app.GET('/inline', sub ($ctx) {
         $ctx.render(
@@ -31,7 +31,7 @@ sub MAIN() {
 
     $app.GET('/file-with-partial', sub ($ctx) {
         $ctx.render(
-            'html-with-partial',
+            'with_partial',
             data => %templates_data,
         );
         return;
@@ -52,7 +52,7 @@ sub MAIN() {
     # TEST: render file
     {
         my $res = $test.request(HTTP::Request.new(GET => "/file"));
-        is($res.content.decode, %templates{'html.mustache'}, 'render file');
+        is($res.content.decode, %templates{'index.html.mustache'}, 'render file');
     }
 
     # TEST: render inline
@@ -64,13 +64,13 @@ sub MAIN() {
     # TEST: render file-with-partial (file and inline)
     {
         my $res = $test.request(HTTP::Request.new(GET => "/file-with-partial"));
-        is($res.content.decode, %templates{'html-with-partial.mustache'}, 'render file with partial');
+        is($res.content.decode, %templates{'with_partial.html.mustache'}, 'render file with partial');
     }
 
     # TEST: render inline-with-partial (file and inline)
     {
         my $res = $test.request(HTTP::Request.new(GET => "/inline-with-partial"));
-        is($res.content.decode, 'hi world, ' ~ %templates{'partial.mustache'}, 'render inline with partial');
+        is($res.content.decode, 'hi world, ' ~ %templates{'partial.html.mustache'}, 'render inline with partial');
     }
 
     done-testing;
@@ -92,7 +92,8 @@ sub read-all-templates(Str $templates_dir, %data) {
         my $contents = Template::Mustache.render(
             $file.IO.slurp,
             %data.clone,
-            from => [$templates_dir]
+            from      => [$templates_dir],
+            extension => ".html.mustache",
         );
 
         %templates{$filename} = $contents;

@@ -1,12 +1,13 @@
-use MONKEY-SEE-NO-EVAL;
+unit class Hematite::Context;
+
 use HTTP::Status;
 use MIME::Types;
 use Logger;
-use X::Hematite;
 use Hematite::Request;
 use Hematite::Response;
+use X::Hematite;
 
-unit class Hematite::Context;
+my Lock $Lock = Lock.new;
 
 # static vars
 my MIME::Types $MimeTypes;
@@ -21,6 +22,9 @@ has %!captures = (
 );
 has %.stash = ();
 has Logger $.log;
+
+subset Helper where .signature ~~ :($ctx, |args);
+has Helper %!helpers = ();
 
 # methods
 method new($app, Hash $env) {
@@ -46,11 +50,15 @@ submethod BUILD(*%args) {
         ndc     => $!app.log.ndc.Array,
     );
 
-    self.log.mdc.put('request_id',
-        sprintf('%s-%s', $*PID, $*THREAD.id));
+    self.log.mdc.put(
+        'request_id',
+        sprintf('%s-%s', $*PID, $*THREAD.id)
+    );
 
     # search for the mime.types file
-    if (!$MimeTypes) {
+    $Lock.protect(sub {
+        return if $MimeTypes;
+
         my @mimetype_paths = ('/etc', '/etc/apache2');
         for @mimetype_paths -> $path {
             my $fullpath = $path ~ '/mime.types';
@@ -59,22 +67,50 @@ submethod BUILD(*%args) {
             $MimeTypes = MIME::Types.new($fullpath);
             last;
         }
-    }
+    });
 
     self.log.debug("processing request: " ~ $!request.uri);
 
     return self;
 }
 
-method FALLBACK(Str $name, |args) {
-    my $helper = self.app.helper($name);
+method can(Str $name --> List) {
+    my @local = callsame;
 
-    X::Method::NotFound.new(
+    return @local.List if @local.elems;
+    return [%!helpers{$name}].List if %!helpers{$name}:exists;
+
+    my $global_helper = self.app.context-helper($name);
+
+    return [$global_helper].List if $global_helper;
+    return ();
+}
+
+multi method add-helper(Str $name, Helper $fn) {
+    %!helpers{$name} = $fn;
+    return self;
+}
+
+method remove-helper(Str $name --> Helper) {
+    return %!helpers{$name}:delete;
+}
+
+multi method FALLBACK(Str $name, |args) {
+    my $helper = %!helpers{$name};
+    return self.$helper(|args) if $helper;
+
+    $helper = self.app.helper($name);
+    return self.$helper(|args) if $helper;
+
+    die X::Method::NotFound.new(
         method   => $name,
         typename => self.^name,
-    ).throw if !$helper;
+    );
+}
 
-    return self.$helper(|args);
+multi method FALLBACK(Str $name where /^render\-/, |args) {
+    my $type = ($name ~~ /^render\-(\w+)$/)[0].Str;
+    return self.render(|args, type => $type);
 }
 
 method !get-captures(Str $type) {
@@ -118,7 +154,7 @@ multi method named-captures(%captures) {
 }
 
 multi method halt(*%args) {
-    X::Hematite::HaltException.new(status => 500, |%args).throw;
+    die X::Hematite::HaltException.new(status => 500, |%args);
 }
 
 multi method halt($body) {
@@ -134,31 +170,6 @@ multi method halt(Int $status, $body) {
 }
 
 method not-found() { self.halt(404); }
-
-method try-catch(Block :$try, Block :$catch?, Block :$finally? --> ::?CLASS) {
-    try {
-        $try();
-
-        CATCH {
-            my $ex = $_;
-
-            when X::Hematite::DetachException {
-                $ex.rethrow;
-            }
-
-            default {
-                $ex.rethrow if !$catch;
-                $catch($ex);
-            }
-        }
-
-        LEAVE {
-            $finally() if $finally;
-        }
-    }
-
-    return self;
-}
 
 multi method url-for(Str $url is copy, @captures is copy, *%query --> Str) {
     # if the $url hasn't the initial '/' use has context the current url
@@ -239,29 +250,25 @@ multi method url-for-route(Str $name, *%query) {
     return self.url-for-route($name, [], |%query);
 }
 
-method !render-to-string($data, %options --> Str) {
-    my $type = %options<type>;
-    if (!$type) {
-        # if is a Str, by default is a template otherwise is json
-        $type = $data.isa(Str) ?? 'template' !! 'json';
-    }
+method !render-to-string($data, %options --> List) {
+    my Str $type = %options<type> || 'template';
 
     %options<type> = $type = $type.lc;
-    return self.app.render-handler($type)($data, |%options);
+
+    return self.app.render-handler($type)(
+        $data,
+        |%options,
+        mime_types => $MimeTypes,
+    );
 }
 
 method render-to-string($data, *%options --> Str) {
-    return self!render-to-string($data, %options);
+    my ($result) = self!render-to-string($data, %options);
+    return $result;
 }
 
-method render($data, *%options --> ::?CLASS:D) {
-    my $result = self!render-to-string($data, %options);
-
-    my Str $type         = %options<type>;
-    my Str $format       = lc(%options<format> // 'html');
-    my Str $content_type = $type eq 'template' ?? $format !! $type;
-
-    $content_type = $MimeTypes.type($content_type);
+method render($data, *%options --> ::?CLASS) {
+    my ($result, $content_type) = self!render-to-string($data, %options);
 
     # guess status
     my Int $status = %options<status> || 200;
@@ -274,9 +281,9 @@ method render($data, *%options --> ::?CLASS:D) {
     return self;
 }
 
-method detach() { X::Hematite::DetachException.new.throw; }
+method detach() { die X::Hematite::DetachException.new; }
 
-method redirect(Str $url --> ::?CLASS:D) {
+method redirect(Str $url --> ::?CLASS) {
     self.res.code = 302;
 
     self.res.headers.location($url);
@@ -332,37 +339,47 @@ multi method handle-error(Exception $ex --> ::?CLASS) {
 method stream(Callable $fn --> ::?CLASS) {
     my Channel $channel = Channel.new;
 
-    # check in every half a second if the client is still receving the data,
+    # check in every half a second if the client is still receiving the data,
     # otherwise close the channel
     # we know the client is receiving if the poll is Nil
     my $scheduler = $*SCHEDULER.cue(
-        {
-            $channel.close if $channel.poll;
-        },
+        { $channel.close if $channel.poll; },
         every => 0.5,
     );
 
     # start a new thread and run the passed function
     start {
         my $orig_request_id = self.log.mdc.get('request_id');
-        self.log.mdc.put('request_id',
-            sprintf('%s-%s', $orig_request_id, $*THREAD.id));
 
-        self.try-catch(
-            try     => sub { $fn(sub ($value) { $channel.send($value); }); },
-            catch   => sub ($ex) {
-                return if $ex.isa(X::Channel::SendOnClosed);
-
-                # log the error
-                self.log.error($ex.gist);
-            },
-            finally => sub {
-                $channel.close;
-                self.log.debug('stream closed');
-            }
+        self.log.mdc.put(
+            'request_id',
+            sprintf('%s-%s', $orig_request_id, $*THREAD.id)
         );
 
-        self.log.mdc.put('request_id', $orig_request_id);
+        $fn(sub ($value) { $channel.send($value); });
+
+        CATCH {
+            my $ex = $_;
+
+            when X::Hematite::DetachException {
+                # Do nothing, detach exception.
+            }
+
+            when X::Channel::SendOnClosed {
+                # Do nothing, the stream was just closed.
+            }
+
+            default {
+                self.log.error($ex.gist);
+            }
+        }
+
+        LEAVE {
+            $channel.close;
+
+            self.log.debug('stream closed');
+            self.log.mdc.put('request_id', $orig_request_id);
+        }
     }.then({
         self.log.debug('stream finished, cancelling the scheduler');
         $scheduler.cancel;

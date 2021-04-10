@@ -1,5 +1,7 @@
 # Hematite
 
+[![test](https://github.com/whity/raku-hematite/actions/workflows/test.yml/badge.svg)](https://github.com/whity/raku-hematite/actions/workflows/test.yml)
+
 ## Usage
 
 ```raku
@@ -25,9 +27,6 @@ class TestMiddleware does Callable {
 }
 
 $app.use(TestMiddleware.new);
-
-# helpers (request context)
-$app.helper('xpto', sub { say 'helper...'; });
 
 # routes (can define any http method)
 $app.GET('/', sub ($ctx) { $ctx.render({'route' => '/'}, 'type' => 'json'); });
@@ -56,7 +55,7 @@ $app.GET(
 $app.GET(
     '/json',
     sub ($ctx) {
-        $ctx.render(
+        $ctx.render-json(
             {'hello' => 'world'},
         );
     }
@@ -130,6 +129,47 @@ class App is Hematite::App {
         self.POST('/', 'ExampleAction');
     }
 }
+```
+
+### context helpers
+
+```raku
+class Middleware does Hematite::Middleware {
+    method CALL-ME {
+        self.add-helper('xpty', sub ($ctx) {
+            # do something...
+        });
+
+        self.next;
+
+        self.remove-helper('xpty');
+    }
+}
+
+my $app = Hematite::App.new;
+
+# register global context helper
+$app.context-helper('xpto', sub ($ctx) { say 'helper...'; });
+
+# register context helpers, directly in the context
+$app.use(sub ($ctx, $next) {
+    $ctx.add-helper('xptz', sub ($ctx) {
+        # do something...
+    });
+
+    $next($ctx);
+
+    $ctx.remove-helper('xptz');
+});
+
+$app.use(Middleware.create);
+
+# just call the helper from the context
+$app.GET('/', sub ($ctx) {
+    $ctx.xpto;
+    $ctx.xptz;
+    $ctx.xpty;
+});
 ```
 
 ## TODO

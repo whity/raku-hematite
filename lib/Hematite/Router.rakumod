@@ -1,9 +1,9 @@
-use X::Hematite;
+unit class Hematite::Router;
+
 use Hematite::Route;
 use Hematite::Context;
 use Hematite::Action;
-
-unit class Hematite::Router;
+use X::Hematite;
 
 has Callable @!middlewares    = ();
 has Hematite::Router %!groups = ();
@@ -140,10 +140,6 @@ method !middleware-runner(Callable $mdw, Callable $next? --> Block) {
 
     return sub (Hematite::Context $ctx) {
         try {
-            # TODO: support a more OO approach e.g.
-            #   the middleware can be a class (does the role Action or role Middleware)
-            #   call it in the following way: mdw.new($ctx, $tmp_next).()
-
             my Int $arity = Nil;
             if ($mdw.isa(Code)) {
                 $arity = $mdw.arity;

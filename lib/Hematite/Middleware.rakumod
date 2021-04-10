@@ -26,6 +26,8 @@ submethod BUILD(:$ctx, :$next, :%args) {
         $attribute.set_value(self, %args{$name});
     }
 
+    self.init(|%args) if self.can('init');
+
     return self;
 }
 
@@ -43,4 +45,11 @@ method create(*%args --> Callable) {
     return sub ($ctx, $next) {
         return self.new($ctx, $next, |%args).();
     };
+}
+
+method can(Str $name --> List) {
+    my @local = callsame;
+
+    return @local.List if @local.elems;
+    return $!ctx.can($name);
 }
