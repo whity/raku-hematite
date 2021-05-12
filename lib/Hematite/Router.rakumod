@@ -74,7 +74,7 @@ multi method METHOD(Str $method, Str $pattern, Str $action) {
 
         CATCH {
             when X::NoSuchSymbol {
-                require $action;
+                require ::($action);
                 $module = ::($action);
             }
         }
