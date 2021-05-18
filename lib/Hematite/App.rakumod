@@ -38,7 +38,12 @@ submethod BUILD(*%args) {
     # error/exception default handler
     self.error-handler(sub ($ctx, *%args) {
         my Exception $ex = %args{'exception'};
-        my $body         = sprintf("%s\n%s", get_http_status_msg(500), $ex.gist);
+        my $body         = sprintf(
+            "%s\n%s\n%s",
+            get_http_status_msg(500),
+            $ex.Str,
+            $ex.backtrace.full,
+        );
 
         $ctx.halt(
             status  => 500,

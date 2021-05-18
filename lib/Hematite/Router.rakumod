@@ -80,20 +80,34 @@ multi method METHOD(Str $method, Str $pattern, Str $action) {
         }
     };
 
-    if ($module.does(Hematite::Action)) {
-        return self."{$method}"($pattern, |$module.create);
-    }
-
     return self."{$method}"($pattern, $module);
 }
 
-method !create-route(Str $method, Str $pattern is copy, Callable $fn --> Hematite::Route) {
+multi method METHOD(Str $method, Str $pattern, Hematite::Action $action) {
+    return self."{$method}"($pattern, |$action.create);
+}
+
+method !create-route(Str $method is copy, Str $pattern is copy, Callable $fn, *%options --> Hematite::Route) {
     # add initial slash to pattern
-    if ($pattern.substr(0, 1) ne "/") {
-        $pattern = "/" ~ $pattern;
+    if ($pattern.substr(0, 1) ne '/') {
+        $pattern = '/' ~ $pattern;
     }
 
-    my Hematite::Route $route = Hematite::Route.new($method.uc, $pattern, $fn);
+    # if our method is 'WS' (websocket), use a 'GET',
+    #   and set the option 'websocket => True'
+
+    if ($method eq 'WS') {
+        $method = 'GET';
+        %options<websocket> = True;
+    }
+
+    my Hematite::Route $route = Hematite::Route.new(
+        $method.uc,
+        $pattern,
+        $fn,
+        |%options
+    );
+
     @!routes.push($route);
 
     return $route;

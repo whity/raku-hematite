@@ -1,5 +1,8 @@
 unit class Hematite::Context;
 
+use WebSocket::Handle;
+use WebSocket::Handshake;
+use WebSocket::Frame::Grammar;
 use HTTP::Status;
 use MIME::Types;
 use Logger;
@@ -25,6 +28,9 @@ has Logger $.log;
 
 subset Helper where .signature ~~ :($ctx, |args);
 has Helper %!helpers = ();
+
+has WebSocket::Handle $!sock_handler;
+has Callable %!sock_events = ();
 
 # methods
 method new($app, Hash $env) {
@@ -402,4 +408,143 @@ method serve-file(Str $filepath --> ::?CLASS) {
     self.res.body = $filepath.IO.open;
 
     return self;
+}
+
+method upgrade-to-websocket(--> ::?CLASS) {
+    my Hash $env = $.request.env;
+
+    # use socket directly is bad idea. But HTTP/2 deprecates
+    # `connection: upgrade`. Then, this code may not
+    # break on feature HTTP updates.
+    my IO::Socket::Async $socket = $env<p6wx.io>;
+
+    die 'no p6wx.io in psgi env' if !$socket;
+
+    if (!($env<HTTP_UPGRADE> ~~ 'websocket')) {
+        $.log.warn('no upgrade header in HTTP request');
+        return self.halt(400);
+    }
+
+    if (!($env<HTTP_SEC_WEBSOCKET_VERSION> ~~ /^\d+$/)) {
+        $.log.warn(
+            (
+                'invalid websocket version...',
+                'draft version of websocket not supported.',
+            ).join,
+        );
+
+        return self.halt(400);
+    }
+
+    my $ws_key = $env<HTTP_SEC_WEBSOCKET_KEY>;
+
+    if (!$ws_key) {
+        $.log.warn('no HTTP_SEC_WEBSOCKET_KEY');
+        return self.halt(400);
+    }
+
+    my $accept = make-sec-websocket-accept($ws_key);
+
+    $!sock_handler  = WebSocket::Handle.new(socket => $socket);
+    $.response.code = 101;
+
+    $.response.headers.from-hash({
+        Connection           => 'Upgrade',
+        Upgrade              => 'websocket',
+        Sec-WebSocket-Accept => $accept,
+    });
+
+    $.response.body = supply {
+        $.log.debug('handshake succeded');
+
+        my $buf;
+
+        whenever $socket.Supply(:bin) -> $got {
+            $buf ~= $got.decode('latin1');
+
+            loop {
+                my $m = WebSocket::Frame::Grammar.subparse($buf);
+
+                if (!$m) {
+                    # maybe, frame is partial. maybe...
+                    $.log.debug('frame is partial');
+                    last;
+                }
+
+                my $frame = $m.made;
+
+                $.log.debug("got frame {$frame.opcode}, {$frame.fin.Str}");
+
+                $buf = $buf.substr($m.to);
+
+                given $frame.opcode {
+                    when (WebSocket::Frame::TEXT) {
+                        $.log.debug("got text frame");
+                        self.on('message').(
+                            $frame.payload.encode('latin1').decode('utf-8')
+                        );
+                    }
+                    when (WebSocket::Frame::DOCLOSE) {
+                        $.log.debug("got close frame");
+                        self.on('close').();
+                        try $!sock_handler.close;
+                        done;
+                    }
+                    when (WebSocket::Frame::PING) {
+                        $.log.debug("got ping frame");
+                        $!sock_handler.pong;
+                    }
+                    when (WebSocket::Frame::PONG) {
+                        $.log.debug("got pong frame");
+                    }
+                    default {
+                        $.log.debug("GOT $_");
+                    }
+                }
+            }
+
+            CATCH {
+                default {
+                    my $ex  = $_;
+                    my $msg = sprintf(
+                        "error in websocket processing: %s\n%s",
+                        $ex.Str,
+                        $ex.backtrace.full,
+                    );
+
+                    $.log.error($msg);
+
+                    done;
+                }
+            }
+        }
+
+        self.on('ready').();
+
+        ();
+    };
+
+    return self;
+}
+
+multi method on(Str $event, Callable $fn --> ::?CLASS) {
+    die 'No websocket started' if !$!sock_handler;
+
+    %!sock_events{$event} = $fn;
+    return self;
+}
+
+multi method on(Str $event --> Callable) {
+    die 'No websocket started' if !$!sock_handler;
+
+    return %!sock_events{$event} // sub (*@args) {};
+}
+
+method send(Str $type is copy, $value?) {
+    die 'No websocket to send message to' if !$!sock_handler;
+
+    $type = 'text' if $type eq 'message';
+
+    return $!sock_handler."send-{$type}"($value) if $value.defined;
+    return $!sock_handler."send-{$type}"();
 }

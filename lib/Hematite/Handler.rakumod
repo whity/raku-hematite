@@ -1,7 +1,7 @@
+unit class Hematite::Handler does Callable;
+
 use Cookie::Baker;
 use Hematite::Context;
-
-unit class Hematite::Handler does Callable;
 
 has $.app;
 has Callable $.stack;
@@ -56,9 +56,8 @@ method CALL-ME(Hash $env) {
 
     @headers.push('content-type' => $content_type);
 
-    if (!$body.isa(Channel) && !$body.isa(IO::Handle)) {
-        $body = Array.new($body.defined ?? $body !! "") if !$body.isa(Array);
-    }
+    $body = $body.defined ?? $body !! '';
+    $body = [$body] if $body.isa(Str);
 
     return [$code, @headers, $body];
 }

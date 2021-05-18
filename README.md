@@ -172,6 +172,59 @@ $app.GET('/', sub ($ctx) {
 });
 ```
 
+### websockets
+
+```raku
+
+my $app = Hematite::App.new;
+
+$app.WS('/websocket', sub ($ctx) {
+    $ctx.on('ready', sub {
+        $ctx.log.info('websocket ready');
+
+        for 1..10 -> $idx {
+            $ctx.send('message', "ping {$idx}");
+        }
+
+        $ctx.send('close');
+    });
+
+    $ctx.on('message', sub ($text) {
+        $ctx.log.info('received: ' ~ $text);
+    });
+
+    $ctx.on('close', sub {
+        $ctx.log.info('websocket closed');
+    });
+});
+
+# OR
+
+class WSAction does Hematite::Action {
+    method CALL-ME {
+        self.on('ready', sub {
+            self.log.info('websocket ready');
+
+            for 1..10 -> $idx {
+                self.send('message', "ping {$idx}");
+            }
+
+            self.send('close');
+        });
+
+        self.on('message', sub ($text) {
+            self.log.info('received: ' ~ $text);
+        });
+
+        self.on('close', sub {
+            self.log.info('websocket closed');
+        });
+    }
+}
+
+$app.WS('/websocket2', WSAction);
+```
+
 ## TODO
 
 - better doc

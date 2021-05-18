@@ -1,30 +1,32 @@
-use MONKEY-SEE-NO-EVAL;
-use Hematite::Context;
-
 unit class Hematite::Route does Callable;
+
+use MONKEY-SEE-NO-EVAL;
+
+use Hematite::Context;
 
 has Str $.method;
 has Str $.pattern;
 has Callable $.stack;
 has Regex $!re;
 has Str $!name;
+has Bool $!is_websocket;
 
-method new(Str $method, Str $pattern, Callable $stack) {
+method new(Str $method, Str $pattern, Callable $stack, *%options) {
     return self.bless(
         method  => $method,
         pattern => $pattern,
         stack   => $stack,
+        |%options,
     );
 }
 
-submethod BUILD(Str :$method, Str :$pattern, Callable :$stack) {
+submethod BUILD(Str :$method, Str :$pattern, Callable :$stack, *%options) {
     my Str $re = $pattern.subst(/\/$/, ""); # remove ending slash
 
     # build regex path
     #   replace ':[word]' by ($<word>)
-    #   we can't have subpattern names duplicated, suffix it with the index
     while (my $match = ($re ~~ /:i \:(\w+)/)) {
-        my Str $group = ~($match[0]);
+        my Str $group = $match[0].Str;
         $re ~~ s/\:$group/\(\$\<$group\>=\\w+\)/;
     }
 
@@ -35,26 +37,27 @@ submethod BUILD(Str :$method, Str :$pattern, Callable :$stack) {
         $re ~~ s:g/$char/\\$char/;
     }
 
-    $!re      = EVAL(sprintf('/^%s$/', $re));
-    $!method  = $method;
-    $!pattern = $pattern;
-    $!stack   = $stack;
+    $!re           = EVAL(sprintf('/^%s$/', $re));
+    $!method       = $method;
+    $!pattern      = $pattern;
+    $!stack        = $stack;
+    $!is_websocket = %options<websocket> // False;
 
     return self;
 }
 
-multi method name() returns Str { return $!name; }
-multi method name(Str $name) returns ::?CLASS {
+multi method name(--> Str) { return $!name; }
+multi method name(Str $name --> ::?CLASS) {
     $!name = $name;
     return self;
 }
 
-method match(Hematite::Context $ctx) returns Bool {
+method match(Hematite::Context $ctx --> Bool) {
     my $req = $ctx.request;
 
-    if ((self.method eq 'ANY' || self.method eq $req.method) && $req.path ~~ $!re) {
-        return True;
-    }
+    return False if !($req.path ~~ $!re);
+    return True if self.method eq 'ANY';
+    return True if self.method eq $req.method;
 
     return False;
 }
@@ -74,10 +77,12 @@ method CALL-ME(Hematite::Context $ctx) {
     $ctx.named-captures(%captures<named>);
     $ctx.captures(%captures<list>);
 
+    $ctx.upgrade-to-websocket if $!is_websocket;
+
     return self.stack.($ctx);
 }
 
-method _find-captures($match) returns Hash {
+method _find-captures($match --> Hash) {
     my @groups = $match.list;
 
     my @list  = ();
