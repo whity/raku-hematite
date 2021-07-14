@@ -59,7 +59,7 @@ class Headers {
             @headers.push($k => $_) for $v;
         }
 
-        return [@headers];
+        return @headers;
     }
 
     method Hash(--> Hash) {

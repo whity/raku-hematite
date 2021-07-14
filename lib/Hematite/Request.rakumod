@@ -55,7 +55,7 @@ method accepts(--> Array) {
 
     $matches = $matches.map(-> $item { $item.Str });
 
-    return [$matches.Array];
+    return $matches.Array;
 }
 
 method json {
@@ -87,5 +87,5 @@ sub parse-params(@items --> Hash) {
         %params{$key} = $value;
     }
 
-    return {%params};
+    return %params;
 }
