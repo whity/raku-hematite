@@ -12,7 +12,10 @@ class Headers {
     }
 
     method header(Str $name, *@values) {
-        return self.remove($name).add($name, |@values) if @values.elems;
+        if (@values.elems) {
+            self.remove($name);
+            self.add($name, |@values);
+        }
 
         my Array $headers = %!headers{$name.lc} // [];
 
@@ -20,9 +23,8 @@ class Headers {
         return $headers.join(', ');
     }
 
-    method remove(Str $name --> ::?CLASS) {
-        %!headers{$name.lc}:delete;
-        return self;
+    method remove(Str $name) {
+        return %!headers{$name.lc}:delete;
     }
 
     method add(Str $name, *@values --> ::?CLASS) {

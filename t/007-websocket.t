@@ -8,8 +8,6 @@ use Hematite;
 use Logger;
 
 sub MAIN {
-    plan(5);
-
     my $port = 15555;
 
     start {
@@ -45,16 +43,16 @@ sub MAIN {
                     $h.send-close;
                 },
                 on-ready => -> $h {
-                    ok(True, 'client: ready');
-
                     sleep 0.1;
-
+                    ok(True, 'client: ready');
                     $h.send-text("STEP1");
                 },
             )
         },
         Promise.in(5).then( { fail "Test timed out!" } ),
     );
+
+    done-testing;
 }
 
 sub wait-port(Int $port) {

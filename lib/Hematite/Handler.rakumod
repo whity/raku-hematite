@@ -33,7 +33,7 @@ method CALL-ME(Hash $env) {
         my $value = $attrs<value>:delete;
         my $bake  = bake-cookie($name, $value, |%($attrs));
 
-        $ctx.res.headers.add('Set-Cookie', $bake);
+        $ctx.res.headers.add('set-cookie', $bake);
     }
 
     # return context response
@@ -41,12 +41,13 @@ method CALL-ME(Hash $env) {
     my $body     = $ctx.res.body;
 
     my @headers = ();
-    for $ctx.res.headers.Hash.kv -> $name, $value {
+    for $ctx.res.headers.Hash.keys -> $name {
         next if $name eq 'content-type';
 
-        for $value.list -> $vl {
-            @headers.push($name => $vl);
-        }
+        my $value = $ctx.res.header($name);
+        next if !$value.defined;
+
+        @headers.push($name => $value);
     }
 
     my Str $content_type = $ctx.res.headers.content-type || 'text/html';

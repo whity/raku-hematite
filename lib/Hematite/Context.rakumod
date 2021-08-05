@@ -105,7 +105,7 @@ multi method FALLBACK(Str $name, |args) {
     my $helper = %!helpers{$name};
     return self.$helper(|args) if $helper;
 
-    $helper = self.app.helper($name);
+    $helper = self.app.context-helper($name);
     return self.$helper(|args) if $helper;
 
     die X::Method::NotFound.new(
@@ -287,7 +287,7 @@ method render($data, *%options --> ::?CLASS) {
     return self;
 }
 
-method detach() { die X::Hematite::DetachException.new; }
+method detach { die X::Hematite::DetachException.new; }
 
 method redirect(Str $url --> ::?CLASS) {
     self.res.code = 302;
